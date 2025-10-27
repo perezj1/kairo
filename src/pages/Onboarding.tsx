@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { pickTodayTask } from '@/lib/taskPlanner';
 import { CategorySelector } from '@/components/onboarding/CategorySelector';
@@ -44,9 +46,14 @@ const Onboarding = () => {
     currentLevel: '',
     targetLevel: '',
     savingsTarget: null,
-    bestSlot: 'Tarde', // UI label; se normaliza antes de guardar
+    bestSlot: 'Tarde',
   });
   const [loading, setLoading] = useState(false);
+
+  const handleBack = () => {
+    if (step === 1) navigate('/home');
+    else setStep((s) => Math.max(1, s - 1));
+  };
 
   const handleCategorySelect = (categoryId: string) => {
     setCategory(categoryId);
@@ -59,29 +66,18 @@ const Onboarding = () => {
   };
 
   const handleFinish = async () => {
-    if (!user) {
-      toast.error('Please sign in to continue');
-      return;
-    }
-    if (!category) {
-      toast.error('Select a category');
-      return;
-    }
-    if (!formData.title?.trim()) {
-      toast.error('Add a goal title');
-      return;
-    }
+    if (!user) return toast.error('Please sign in to continue');
+    if (!category) return toast.error('Select a category');
+    if (!formData.title?.trim()) return toast.error('Add a goal title');
 
     setLoading(true);
     try {
-      // Normaliza best_slot a slug en inglés
       const best_slot =
         bestSlotMap[formData.bestSlot] ??
         (['morning', 'noon', 'afternoon', 'night'].includes(formData.bestSlot)
           ? (formData.bestSlot as 'morning' | 'noon' | 'afternoon' | 'night')
           : 'afternoon');
 
-      // specific_details guarda todo lo extra (no columnas fijas)
       const specificDetails = {
         subCategory,
         minutes: formData.minutes,
@@ -91,22 +87,21 @@ const Onboarding = () => {
         currentLevel: formData.currentLevel,
         targetLevel: formData.targetLevel,
         savingsTarget: formData.savingsTarget,
-        bestSlotUi: formData.bestSlot, // lo que vio/eligió el usuario (etiqueta)
+        bestSlotUi: formData.bestSlot,
       };
 
-      // payload SOLO con columnas que existen en DB
       const goalData = {
         user_id: user.id,
         title: formData.title.trim(),
-        category,                         // text
-        minutes_per_day: Number(formData.minutes), // smallint/int
+        category,
+        minutes_per_day: Number(formData.minutes),
         level: 1,
         xp: 0,
         streak: 0,
         hearts: 3,
         active: true,
-        best_slot,                        // 'morning' | 'noon' | 'afternoon' | 'night'
-        specific_details: specificDetails // jsonb
+        best_slot,
+        specific_details: specificDetails,
       };
 
       const { data: goal, error: goalError } = await supabase
@@ -114,10 +109,8 @@ const Onboarding = () => {
         .insert([goalData])
         .select()
         .single();
-
       if (goalError) throw goalError;
 
-      // Crea el reto de hoy (si aplica)
       const task = pickTodayTask(category, 1, formData.minutes, []);
       if (task) {
         const today = new Date().toISOString().split('T')[0];
@@ -129,10 +122,7 @@ const Onboarding = () => {
           text: task.text,
           status: 'pending',
         });
-        if (chErr) {
-          // no bloquea el flujo, solo avisa
-          console.error('Challenge insert error:', chErr.message || chErr);
-        }
+        if (chErr) console.error('Challenge insert error:', chErr.message || chErr);
       }
 
       toast.success('¡Objetivo creado! Comencemos tu viaje.');
@@ -147,8 +137,21 @@ const Onboarding = () => {
 
   return (
     <div className="min-h-screen p-4 flex items-center justify-center bg-background">
-      <Card className="w-full max-w-lg shadow-card">
-        <CardContent className="p-6">
+      <Card className="w-full max-w-lg shadow-card relative">
+        {/* Flecha flotante SOLO en paso 1 para evitar duplicados */}
+        {step === 1 && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleBack}
+            className="absolute top-3 left-3 text-muted-foreground hover:text-foreground hover:bg-accent rounded-full"
+            aria-label="Volver"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+        )}
+
+        <CardContent className="p-6 pt-10">
           {step === 1 && (
             <CategorySelector
               selectedCategory={category}
@@ -161,7 +164,7 @@ const Onboarding = () => {
               categoryId={category}
               selectedSubCategory={subCategory}
               onSelect={handleSubCategorySelect}
-              onBack={() => setStep(1)}
+              onBack={handleBack}
             />
           )}
 
@@ -171,7 +174,7 @@ const Onboarding = () => {
               subCategoryId={subCategory}
               formData={formData}
               onUpdate={setFormData}
-              onBack={() => setStep(2)}
+              onBack={handleBack}
               onSubmit={handleFinish}
               loading={loading}
             />
