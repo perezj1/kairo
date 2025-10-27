@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { DEADLINE_OPTIONS, TIME_OPTIONS, TIME_SLOT_OPTIONS } from '@/lib/categories';
 import { ArrowLeft } from 'lucide-react';
 import { SaludForm } from './forms/SaludForm';
 import { AlimentacionForm } from './forms/AlimentacionForm';
@@ -9,6 +9,15 @@ import { FinanzasForm } from './forms/FinanzasForm';
 import { RelacionesForm } from './forms/RelacionesForm';
 import { CarreraForm } from './forms/CarreraForm';
 import { OtrosForm } from './forms/OtrosForm';
+import {
+  DEADLINE_OPTIONS,
+  TIME_OPTIONS,
+  TIME_SLOT_OPTIONS,
+  LANGUAGE_LEVEL_OPTIONS,   // 👈 nuevo
+  LANGUAGE_TARGET_OPTIONS,  // 👈 nuevo
+  WEIGHT_OPTIONS            // 👈 nuevo (si usas renderOldForm)
+} from '@/lib/categories';
+
 
 interface GoalDetailsFormProps {
   categoryId: string;
@@ -27,25 +36,95 @@ export const GoalDetailsForm = ({
   onUpdate,
   onBack,
   onSubmit,
-  loading
+  loading,
 }: GoalDetailsFormProps) => {
-  
+  // helper para actualizar el estado del formulario
+  const updateField = (key: string, value: any) => {
+    onUpdate({ ...formData, [key]: value });
+  };
+
   const renderCategoryForm = () => {
     const forms: Record<string, JSX.Element | null> = {
-      salud: <SaludForm subCategoryId={subCategoryId} formData={formData} onUpdate={onUpdate} />,
-      alimentacion: <AlimentacionForm subCategoryId={subCategoryId} formData={formData} onUpdate={onUpdate} />,
-      mental: <MentalForm subCategoryId={subCategoryId} formData={formData} onUpdate={onUpdate} />,
-      finanzas: <FinanzasForm subCategoryId={subCategoryId} formData={formData} onUpdate={onUpdate} />,
-      relaciones: <RelacionesForm subCategoryId={subCategoryId} formData={formData} onUpdate={onUpdate} />,
-      carrera: <CarreraForm subCategoryId={subCategoryId} formData={formData} onUpdate={onUpdate} />,
-      reducir_habitos: <OtrosForm categoryId={categoryId} subCategoryId={subCategoryId} formData={formData} onUpdate={onUpdate} />,
-      organizacion: <OtrosForm categoryId={categoryId} subCategoryId={subCategoryId} formData={formData} onUpdate={onUpdate} />,
-      autocuidado: <OtrosForm categoryId={categoryId} subCategoryId={subCategoryId} formData={formData} onUpdate={onUpdate} />,
-      nuevo: <OtrosForm categoryId={categoryId} subCategoryId={subCategoryId} formData={formData} onUpdate={onUpdate} />
+      salud: (
+        <SaludForm
+          subCategoryId={subCategoryId}
+          formData={formData}
+          onUpdate={onUpdate}
+        />
+      ),
+      alimentacion: (
+        <AlimentacionForm
+          subCategoryId={subCategoryId}
+          formData={formData}
+          onUpdate={onUpdate}
+        />
+      ),
+      mental: (
+        <MentalForm
+          subCategoryId={subCategoryId}
+          formData={formData}
+          onUpdate={onUpdate}
+        />
+      ),
+      finanzas: (
+        <FinanzasForm
+          subCategoryId={subCategoryId}
+          formData={formData}
+          onUpdate={onUpdate}
+        />
+      ),
+      relaciones: (
+        <RelacionesForm
+          subCategoryId={subCategoryId}
+          formData={formData}
+          onUpdate={onUpdate}
+        />
+      ),
+      carrera: (
+        <CarreraForm
+          subCategoryId={subCategoryId}
+          formData={formData}
+          onUpdate={onUpdate}
+        />
+      ),
+      reducir_habitos: (
+        <OtrosForm
+          categoryId={categoryId}
+          subCategoryId={subCategoryId}
+          formData={formData}
+          onUpdate={onUpdate}
+        />
+      ),
+      organizacion: (
+        <OtrosForm
+          categoryId={categoryId}
+          subCategoryId={subCategoryId}
+          formData={formData}
+          onUpdate={onUpdate}
+        />
+      ),
+      autocuidado: (
+        <OtrosForm
+          categoryId={categoryId}
+          subCategoryId={subCategoryId}
+          formData={formData}
+          onUpdate={onUpdate}
+        />
+      ),
+      nuevo: (
+        <OtrosForm
+          categoryId={categoryId}
+          subCategoryId={subCategoryId}
+          formData={formData}
+          onUpdate={onUpdate}
+        />
+      ),
     };
 
     return forms[categoryId] || null;
   };
+
+  // --- bloques opcionales/legacy (corregidos con type="button") ---
 
   const renderOldForm = () => (
     <>
@@ -54,6 +133,7 @@ export const GoalDetailsForm = ({
         <div className="grid grid-cols-3 gap-2 mt-2">
           {WEIGHT_OPTIONS.map((option) => (
             <Button
+              type="button"
               key={option.id}
               variant={formData.targetWeight === option.value ? 'default' : 'outline'}
               onClick={() => {
@@ -81,12 +161,13 @@ export const GoalDetailsForm = ({
           className="mt-2"
         />
       </div>
-      
+
       <div>
         <Label className="text-sm font-medium">Nivel actual</Label>
         <div className="grid grid-cols-3 gap-2 mt-2">
           {LANGUAGE_LEVEL_OPTIONS.slice(0, 6).map((option) => (
             <Button
+              type="button"
               key={option.id}
               variant={formData.currentLevel === option.value ? 'default' : 'outline'}
               onClick={() => updateField('currentLevel', option.value)}
@@ -103,6 +184,7 @@ export const GoalDetailsForm = ({
         <div className="grid grid-cols-2 gap-2 mt-2">
           {LANGUAGE_TARGET_OPTIONS.map((option) => (
             <Button
+              type="button"
               key={option.id}
               variant={formData.targetLevel === option.value ? 'default' : 'outline'}
               onClick={() => updateField('targetLevel', option.value)}
@@ -133,7 +215,7 @@ export const GoalDetailsForm = ({
 
   const renderGenericForm = () => (
     <>
-      {categoryId !== 'salud' || subCategoryId !== 'bajar_peso' && (
+      {!(categoryId === 'salud' && subCategoryId === 'bajar_peso') && (
         <div>
           <Label className="text-sm font-medium">Título de tu objetivo</Label>
           <Input
@@ -147,10 +229,12 @@ export const GoalDetailsForm = ({
     </>
   );
 
+  // --- render principal ---
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3 mb-6">
-        <Button variant="ghost" size="icon" onClick={onBack}>
+        <Button type="button" variant="ghost" size="icon" onClick={onBack}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
@@ -158,16 +242,17 @@ export const GoalDetailsForm = ({
           <p className="text-sm text-muted-foreground">Cuanto más específico, mejor</p>
         </div>
       </div>
-      
+
       <div className="space-y-5">
         {renderCategoryForm()}
 
-        {/* Common fields */}
+        {/* Campos comunes */}
         <div>
           <Label className="text-sm font-medium">Fecha límite</Label>
           <div className="grid grid-cols-2 gap-2 mt-2">
             {DEADLINE_OPTIONS.map((option) => (
               <Button
+                type="button"
                 key={option.id}
                 variant={formData.deadlineWeeks === option.value ? 'default' : 'outline'}
                 onClick={() => updateField('deadlineWeeks', option.value)}
@@ -184,6 +269,7 @@ export const GoalDetailsForm = ({
           <div className="grid grid-cols-4 gap-2 mt-2">
             {TIME_OPTIONS.map((option) => (
               <Button
+                type="button"
                 key={option.id}
                 variant={formData.minutes === option.value ? 'default' : 'outline'}
                 onClick={() => updateField('minutes', option.value)}
@@ -200,6 +286,7 @@ export const GoalDetailsForm = ({
           <div className="grid grid-cols-2 gap-2 mt-2">
             {TIME_SLOT_OPTIONS.map((option) => (
               <Button
+                type="button"
                 key={option.id}
                 variant={formData.bestSlot === option.value ? 'default' : 'outline'}
                 onClick={() => updateField('bestSlot', option.value)}
@@ -213,11 +300,11 @@ export const GoalDetailsForm = ({
       </div>
 
       <div className="flex gap-3 pt-4">
-        <Button variant="outline" onClick={onBack} className="flex-1">
+        <Button type="button" variant="outline" onClick={onBack} className="flex-1">
           Atrás
         </Button>
-        <Button 
-          onClick={onSubmit} 
+        <Button
+          onClick={onSubmit}
           disabled={!formData.title || !formData.deadlineWeeks || loading}
           className="flex-1"
         >
@@ -227,3 +314,10 @@ export const GoalDetailsForm = ({
     </div>
   );
 };
+
+/* 
+  NOTA:
+  - WEIGHT_OPTIONS, LANGUAGE_LEVEL_OPTIONS y LANGUAGE_TARGET_OPTIONS
+    deben existir si usas renderOldForm/renderLanguageForm.
+  - Si no los usas, puedes eliminar esas funciones para simplificar.
+*/
