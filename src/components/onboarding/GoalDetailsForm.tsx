@@ -8,6 +8,7 @@ import { MentalForm } from './forms/MentalForm';
 import { FinanzasForm } from './forms/FinanzasForm';
 import { RelacionesForm } from './forms/RelacionesForm';
 import { CarreraForm } from './forms/CarreraForm';
+import { ReducirHabitosForm, type ReducirHabitosSubId } from "./forms/ReducirHabitosForm";
 import { OtrosForm } from './forms/OtrosForm';
 import {
   DEADLINE_OPTIONS,
@@ -87,14 +88,20 @@ export const GoalDetailsForm = ({
           onUpdate={onUpdate}
         />
       ),
+     
+
       reducir_habitos: (
-        <OtrosForm
-          categoryId={categoryId}
-          subCategoryId={subCategoryId}
-          formData={formData}
-          onUpdate={onUpdate}
-        />
-      ),
+  <>
+    {(["fumar","alcohol","azucar","redes_sociales","otro_habito"] as const).includes(subCategoryId as any) && (
+      <ReducirHabitosForm
+        subCategoryId={subCategoryId as ReducirHabitosSubId}
+        formData={formData}
+        onUpdate={onUpdate}
+        // showMinutes={false} showDeadline={false}  // si ya los muestras globalmente
+      />
+    )}
+  </>
+),
       organizacion: (
         <OtrosForm
           categoryId={categoryId}

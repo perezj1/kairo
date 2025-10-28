@@ -34,7 +34,7 @@ export default function GoalPillCard({
   doneCount = 0,
 }: GoalPillCardProps) {
   const icon = getCategoryIcon(goal.category);
-  const catColor = getCategoryColor(goal.category);
+  const catColor = getCategoryColor(goal.category); // ← gradient según categoría
 
   return (
     <Card
@@ -44,7 +44,7 @@ export default function GoalPillCard({
         selected ? "ring-2 ring-primary scale-[1.02]" : "hover:scale-[1.01]"
       )}
       style={{
-        background: "var(--gradient-hero)",
+        background: catColor || "var(--gradient-hero)", // ← único cambio visual
         color: "hsl(var(--primary-foreground))",
       }}
     >

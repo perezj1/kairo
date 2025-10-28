@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Flame, Heart, Trophy, LogOut, Settings, TrendingUp, Target } from "lucide-react";
+import { Flame, Heart, Trophy, LogOut, Settings, Target } from "lucide-react";
 import { toast } from "sonner";
 import GoalPillCard from "@/components/home/GoalPillCard";
 import DailyTaskItem from "@/components/home/DailyTaskItem";
@@ -60,8 +60,7 @@ const Home = () => {
     [todayISO]
   );
 
-  /** ---------- DATA LOADERS ---------- */
-
+  // ---------- DATA LOADERS ----------
   const fetchGoals = useCallback(async () => {
     if (!user) return;
     try {
@@ -78,7 +77,6 @@ const Home = () => {
       const list = (goalRows || []) as Goal[];
       setGoals(list);
 
-      // seleccionar seguro
       if (list.length > 0) {
         const stillExists = list.some((g) => g.id === selectedGoalId);
         setSelectedGoalId(stillExists ? selectedGoalId : list[0].id);
@@ -86,7 +84,6 @@ const Home = () => {
         setSelectedGoalId(null);
       }
 
-      // cargar stats de hoy para TODAS las metas (para que cada tarjeta mantenga sus números)
       if (list.length > 0) {
         await fetchAllTodayStats(list.map((g) => g.id));
       } else {
@@ -118,7 +115,6 @@ const Home = () => {
           if (row.status === "done") agg[row.goal_id].done += 1;
         });
 
-        // asegura que todas tengan entrada aunque sea 0/0
         goalIds.forEach((id) => {
           if (!agg[id]) agg[id] = { done: 0, total: 0 };
         });
@@ -126,7 +122,6 @@ const Home = () => {
         setTodayStats(agg);
       } catch (e) {
         console.error(e);
-        // no romper UI si falla
       }
     },
     [todayISO]
@@ -147,7 +142,6 @@ const Home = () => {
         const list = (data || []) as Challenge[];
         setTodayTasks(list);
 
-        // también refresca los stats de ese objetivo concreto
         const done = list.filter((t) => t.status === "done").length;
         const total = list.length;
         setTodayStats((prev) => ({ ...prev, [goalId]: { done, total } }));
@@ -163,8 +157,7 @@ const Home = () => {
     if (selectedGoalId) await fetchTodayTasks(selectedGoalId);
   }, [fetchTodayTasks, selectedGoalId]);
 
-  /** ---------- EFFECTS ---------- */
-
+  // ---------- EFFECTS ----------
   useEffect(() => {
     if (user) fetchGoals();
   }, [user, fetchGoals]);
@@ -174,8 +167,7 @@ const Home = () => {
     else setTodayTasks([]);
   }, [selectedGoalId, fetchTodayTasks]);
 
-  /** ---------- DERIVED STATE ---------- */
-
+  // ---------- DERIVED ----------
   const selectedStats = todayStats[selectedGoalId ?? ""] || { done: 0, total: 0 };
   const doneCount = selectedStats.done;
   const totalCount = selectedStats.total;
@@ -185,8 +177,7 @@ const Home = () => {
     return Math.round((doneCount / totalCount) * 100);
   }, [doneCount, totalCount]);
 
-  /** ---------- REWARD WHEN ALL DONE (se mantiene) ---------- */
-
+  // ---------- REWARD WHEN ALL DONE ----------
   const maybeAwardAndCelebrate = useCallback(async () => {
     if (!selectedGoal || totalCount === 0) return;
     const alreadyRewarded = localStorage.getItem(rewardKey(selectedGoal.id));
@@ -215,7 +206,7 @@ const Home = () => {
       } catch {}
       toast.success("¡Todo hecho por hoy! +10 XP 🔥 +1 racha");
 
-      fetchGoals(); // refrescar stats visibles
+      fetchGoals();
     } catch (e) {
       console.error(e);
       toast.error("No se pudo aplicar la recompensa");
@@ -226,8 +217,7 @@ const Home = () => {
     maybeAwardAndCelebrate();
   }, [doneCount, totalCount, selectedGoal?.id, maybeAwardAndCelebrate]);
 
-  /** ---------- RENDER ---------- */
-
+  // ---------- RENDER ----------
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -340,7 +330,7 @@ const Home = () => {
           )}
         </div>
 
-        {/* Progreso del día (del objetivo seleccionado) */}
+        {/* Progreso del día */}
         <div className="rounded-xl border border-border/60 p-3">
           <div className="flex items-center justify-between text-sm mb-2">
             <span>Progreso diario</span>
@@ -352,17 +342,14 @@ const Home = () => {
           </div>
         </div>
 
-        {/* Lista 3–5 tareas (tarjetas pequeñas) */}
+        {/* Lista 3–5 tareas */}
         {todayTasks.length > 0 ? (
           <div className="space-y-3">
             {todayTasks.map((t) => (
               <DailyTaskItem
                 key={t.id}
                 task={t}
-                onStatusChange={() => {
-                  // Refresca tareas y también contadores/porcentajes de esa meta
-                  reloadToday();
-                }}
+                onStatusChange={() => reloadToday()}
               />
             ))}
           </div>
@@ -373,22 +360,6 @@ const Home = () => {
             </CardContent>
           </Card>
         )}
-
-        {/* Acciones rápidas */}
-        <div className="grid grid-cols-2 gap-3">
-          <Button variant="outline" className="h-20" onClick={() => navigate("/goals")}>
-            <div className="text-center">
-              <Target className="h-5 w-5 mx-auto mb-1" />
-              <div className="text-sm font-medium">Mis objetivos</div>
-            </div>
-          </Button>
-          <Button variant="outline" className="h-20" onClick={() => navigate("/progress")}>
-            <div className="text-center">
-              <TrendingUp className="h-5 w-5 mx-auto mb-1" />
-              <div className="text-sm font-medium">Progreso</div>
-            </div>
-          </Button>
-        </div>
       </div>
     </div>
   );

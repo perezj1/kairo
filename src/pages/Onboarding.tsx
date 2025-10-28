@@ -11,6 +11,7 @@ import { CategorySelector } from '@/components/onboarding/CategorySelector';
 import { SubCategorySelector } from '@/components/onboarding/SubCategorySelector';
 import { GoalDetailsForm } from '@/components/onboarding/GoalDetailsForm';
 
+
 type FormData = {
   title: string;
   minutes: number;
@@ -56,9 +57,16 @@ const Onboarding = () => {
   };
 
   const handleCategorySelect = (categoryId: string) => {
-    setCategory(categoryId);
-    setStep(2);
-  };
+  if (categoryId === "nuevo") {
+    // No avanzamos de paso; solo informamos
+    toast.message("Proponer nueva categoría", {
+      description: "En breve podrás sugerirla desde Ajustes › Feedback. 🙌",
+    });
+    return;
+  }
+  setCategory(categoryId);
+  setStep(2);
+};
 
   const handleSubCategorySelect = (subCategoryId: string) => {
     setSubCategory(subCategoryId);
