@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import GoalPillCard from "@/components/home/GoalPillCard";
 import DailyTaskItem from "@/components/home/DailyTaskItem";
 import { getCategoryIcon } from "@/lib/taskPlanner";
+import { ensureTodayTasksForGoal } from "@/lib/tasks";
 
 interface Goal {
   id: string;
@@ -24,15 +25,18 @@ interface Goal {
   active: boolean;
   created_at?: string;
   user_id?: string;
+  minutes?: number;
+  minutes_per_day?: number;
+  // form_data?: Record<string, any>; // <- si en el futuro quieres usarlo, expónlo también en lib/tasks
 }
 
 interface Challenge {
   id: string;
   goal_id: string;
-  day: string;    // YYYY-MM-DD
+  day: string; // YYYY-MM-DD
   text: string;
   minutes: number;
-  kind: string;   // accion | educacion | reflexion
+  kind: string; // accion | educacion | reflexion
   status: string; // pending | done | skipped
   created_at?: string;
 }
@@ -49,7 +53,7 @@ const Home = () => {
   const [todayStats, setTodayStats] = useState<TodayStats>({});
   const [loading, setLoading] = useState(true);
 
-  // --- refs para carrusel y tarjetas ---
+  // refs carrusel
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -70,7 +74,6 @@ const Home = () => {
     try {
       setLoading(true);
 
-      // preserva scroll actual del carrusel
       const prevScrollLeft = scrollerRef.current?.scrollLeft ?? 0;
 
       const { data: goalRows, error } = await supabase
@@ -85,7 +88,6 @@ const Home = () => {
       const list = (goalRows || []) as Goal[];
       setGoals(list);
 
-      // mantiene selección si existe
       if (list.length > 0) {
         const stillExists = list.some((g) => g.id === selectedGoalId);
         setSelectedGoalId(stillExists ? selectedGoalId : list[0].id);
@@ -99,7 +101,6 @@ const Home = () => {
         setTodayStats({});
       }
 
-      // restaura posición del carrusel tras render
       requestAnimationFrame(() => {
         if (scrollerRef.current) scrollerRef.current.scrollLeft = prevScrollLeft;
       });
@@ -128,11 +129,9 @@ const Home = () => {
           agg[row.goal_id].total += 1;
           if (row.status === "done") agg[row.goal_id].done += 1;
         });
-
         goalIds.forEach((id) => {
           if (!agg[id]) agg[id] = { done: 0, total: 0 };
         });
-
         setTodayStats(agg);
       } catch (e) {
         console.error(e);
@@ -153,29 +152,83 @@ const Home = () => {
           .limit(5);
 
         if (error) throw error;
-        const list = (data || []) as Challenge[];
-        setTodayTasks(list);
 
+        const list = (data || []) as Challenge[];
+
+        // Si no hay tareas, generamos y re-leemos
+        if (list.length === 0) {
+          const g = goals.find((x) => x.id === goalId);
+          if (g) {
+            try {
+              await ensureTodayTasksForGoal({
+                id: g.id,
+                category: g.category,
+                level: g.level ?? 1,
+                minutes_per_day: g.minutes_per_day ?? g.minutes ?? 10,
+              });
+            } catch (err: any) {
+              // ignora duplicados
+              const msg = String(err?.message || "");
+              const code = err?.code ?? err?.status;
+              const isDup =
+                code === 409 ||
+                code === "23505" ||
+                /duplicate key|unique constraint/i.test(msg);
+              if (!isDup) console.error("ensureTodayTasksForGoal error:", err);
+            }
+
+            const again = await supabase
+              .from("challenges")
+              .select("*")
+              .eq("goal_id", goalId)
+              .eq("day", todayISO)
+              .order("created_at", { ascending: true })
+              .limit(5);
+
+            if (!again.error) {
+              const reList = (again.data || []) as Challenge[];
+              setTodayTasks(reList);
+              const doneR = reList.filter((t) => t.status === "done").length;
+              const totalR = reList.length;
+              setTodayStats((prev) => ({ ...prev, [goalId]: { done: doneR, total: totalR } }));
+              return;
+            }
+          }
+        }
+
+        // Normal path
+        setTodayTasks(list);
         const done = list.filter((t) => t.status === "done").length;
         const total = list.length;
         setTodayStats((prev) => ({ ...prev, [goalId]: { done, total } }));
-      } catch (e) {
-        console.error(e);
-        toast.error("No se pudieron cargar las tareas de hoy");
+      } catch (e: any) {
+        const msg = String(e?.message || "");
+        const code = e?.code ?? e?.status;
+        const isDup =
+          code === 409 ||
+          code === "23505" ||
+          /duplicate key|unique constraint/i.test(msg);
+
+        if (!isDup) {
+          console.error("fetchTodayTasks error:", e);
+          toast.error("No se pudieron cargar las tareas de hoy");
+        }
+
+        setTodayTasks([]);
+        setTodayStats((prev) => ({ ...prev, [goalId]: { done: 0, total: 0 } }));
       }
     },
-    [todayISO]
+    [todayISO, goals]
   );
 
   const reloadToday = useCallback(async () => {
     if (selectedGoalId) await fetchTodayTasks(selectedGoalId);
   }, [fetchTodayTasks, selectedGoalId]);
 
-  // centra visualmente la tarjeta seleccionada
+  // Centrar la tarjeta seleccionada
   const handleSelectGoal = useCallback((id: string) => {
     setSelectedGoalId(id);
     const el = itemRefs.current[id];
-    // centra dentro del carrusel sin mover la página completa
     el?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
   }, []);
 
@@ -250,7 +303,7 @@ const Home = () => {
 
   return (
     <div className="min-h-screen">
-      {/* HERO / header */}
+      {/* HERO */}
       <div
         className="rounded-b-3xl p-4 pb-6 text-white"
         style={{ background: "var(--gradient-hero)" }}
@@ -267,7 +320,7 @@ const Home = () => {
             <Button
               variant="ghost"
               size="icon"
-              className="text-white hover:bg-white/20"
+              className="text-white hover:bg白/20 hover:bg-white/20"
               onClick={() => navigate("/settings")}
             >
               <Settings className="h-5 w-5" />
@@ -283,7 +336,7 @@ const Home = () => {
           </div>
         </div>
 
-        {/* Carrusel horizontal de objetivos */}
+        {/* Carrusel */}
         {goals.length > 0 ? (
           <div
             ref={scrollerRef}
@@ -348,7 +401,7 @@ const Home = () => {
         )}
       </div>
 
-      {/* Contenido inferior: tareas del objetivo seleccionado */}
+      {/* Tareas del objetivo seleccionado */}
       <div className="p-4 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Tareas de hoy</h2>
@@ -359,7 +412,7 @@ const Home = () => {
           )}
         </div>
 
-        {/* Progreso del día */}
+        {/* Progreso */}
         <div className="rounded-xl border border-border/60 p-3">
           <div className="flex items-center justify-between text-sm mb-2">
             <span>Progreso diario</span>
@@ -371,7 +424,7 @@ const Home = () => {
           </div>
         </div>
 
-        {/* Lista 3–5 tareas */}
+        {/* Lista de tareas */}
         {todayTasks.length > 0 ? (
           <div className="space-y-3">
             {todayTasks.map((t) => (

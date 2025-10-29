@@ -24,6 +24,7 @@ interface TaskHistory {
 /* ------------------------------------------------------------------ */
 
 const TASK_LIBRARY: Task[] = [
+  
   // SALUD - Level 1
   { kind: "accion", minutes: 5, text: "Da 300 pasos sin mirar el móvil.", category: "salud", level: 1, tags: ["home", "sin_equipo"] },
   { kind: "accion", minutes: 5, text: "Haz 10 sentadillas lentas y controladas.", category: "salud", level: 1, tags: ["home", "sin_equipo"] },
@@ -110,7 +111,20 @@ const TASK_LIBRARY: Task[] = [
   { kind: "accion", minutes: 25, text: "Bloque de trabajo intenso en tu objetivo principal.", category: "otro", level: 4, tags: ["home"] },
   { kind: "reflexion", minutes: 10, text: "Evalúa tu progreso semanal y ajusta tu estrategia.", category: "otro", level: 4, tags: ["home"] },
 ];
+// ALIMENTACION - Level 1–3 (ejemplos)
+TASK_LIBRARY.push(
+  { kind: "accion", minutes: 5, text: "Añade una ración de verdura a tu próxima comida.", category: "alimentacion", level: 1, tags: ["home"] },
+  { kind: "educacion", minutes: 5, text: "Mira un video de 5 min sobre cómo leer etiquetas de azúcar.", category: "alimentacion", level: 1, tags: ["home"] },
+  { kind: "reflexion", minutes: 3, text: "Escribe 1 snack saludable que te guste y tenlo a mano.", category: "alimentacion", level: 1, tags: ["home"] },
 
+  { kind: "accion", minutes: 10, text: "Prepara una ensalada rápida con 3 colores distintos.", category: "alimentacion", level: 2, tags: ["home"] },
+  { kind: "educacion", minutes: 8, text: "Lee un artículo corto sobre fibra y por qué sacia.", category: "alimentacion", level: 2, tags: ["home"] },
+  { kind: "reflexion", minutes: 3, text: "¿Qué comida del día es tu punto débil? Anota 1 mejora.", category: "alimentacion", level: 2, tags: ["home"] },
+
+  { kind: "accion", minutes: 15, text: "Batch-prep: lava y corta verduras para 2 comidas.", category: "alimentacion", level: 3, tags: ["home"] },
+  { kind: "educacion", minutes: 12, text: "Aprende 3 proteínas vegetales y 1 forma simple de usarlas.", category: "alimentacion", level: 3, tags: ["home"] },
+  { kind: "reflexion", minutes: 5, text: "Revisa tus bebidas hoy y marca 1 sustitución por agua o té.", category: "alimentacion", level: 3, tags: ["home"] },
+);
 /* ------------------------------------------------------------------ */
 /*                     UTILIDADES DE SELECCIÓN                         */
 /* ------------------------------------------------------------------ */
