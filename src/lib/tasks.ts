@@ -2,33 +2,46 @@
 import { supabase } from "@/integrations/supabase/client";
 import { pickTodayTask } from "@/lib/taskPlanner";
 
+/* ----------------------------------------------------------------------- */
+/* Builder de filas: normaliza y devuelve 'any[]' para evitar choque TS     */
+/* ----------------------------------------------------------------------- */
+function buildChallengeRows(rows: Array<{
+  goal_id: string;
+  day: string;          // YYYY-MM-DD
+  text: string;
+  minutes: number;
+  kind: "accion" | "educacion" | "reflexion";
+  status: "pending" | "done" | "skipped";
+}>): any[] {
+  return rows.map((r) => ({
+    goal_id: r.goal_id,
+    day: r.day,
+    text: r.text,
+    minutes: r.minutes,
+    kind: String(r.kind),
+    status: String(r.status),
+  })) as any[];
+}
+
 /* ----------------------- Helpers de normalización ----------------------- */
 
 const CATEGORY_DB_MAP: Record<string, string> = {
-  // mapeo flexible -> slug de BD (task_templates.category)
   salud: "salud",
   salud_fisica: "salud",
-
   alimentacion: "alimentacion",
   "alimentación": "alimentacion",
-
   finanzas: "finanzas",
-  ahorro: "finanzas", // en BD usamos 'finanzas'
-
+  ahorro: "finanzas",
   organizacion: "organizacion",
   "organización": "organizacion",
   enfoque: "organizacion",
-
   carrera: "carrera",
-  idioma: "carrera", // aprendizaje
-
+  idioma: "carrera",
   relaciones: "relaciones",
   autocuidado: "autocuidado",
-
   reducir_habitos: "habitos_nocivos",
   habitos_nocivos: "habitos_nocivos",
-
-  nuevo: "carrera", // genérico a aprendizaje
+  nuevo: "carrera",
 };
 
 function normalizeCategory(raw?: string): string {
@@ -46,16 +59,13 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 function overlaps(a: string[] | null | undefined, b: string[]): boolean {
-  if (!a || a.length === 0 || b.length === 0) return true; // si no hay tags en plantilla, la aceptamos
+  if (!a || a.length === 0 || b.length === 0) return true;
   const setB = new Set(b);
   return a.some((t) => setB.has(t));
 }
 
-// Lee tags del JSON de formulario del goal (suave: si no existen, devuelve [])
 function tagsFromForm(formData: any): string[] {
   const tags = new Set<string>();
-
-  // Lugar/equipo
   if (!formData) return [];
 
   // Organización
@@ -72,45 +82,34 @@ function tagsFromForm(formData: any): string[] {
   // Email/productividad
   if (formData.accounts) tags.add("email");
 
-  // Siempre añadimos 'home' por defecto si no hay localización
+  // Por defecto añade 'home' si no hay 'gimnasio'
   if (![...tags].some((t) => t === "gimnasio")) tags.add("home");
 
   return Array.from(tags);
 }
 
 function pickLocale(profileLocale?: string | null): { locale: string; fallback: string } {
-  // Priorizamos el idioma del perfil; fallback a 'en' como reserva
   const l = (profileLocale || "es").split("-")[0].toLowerCase();
   return { locale: l, fallback: l === "es" ? "en" : "es" };
 }
 
 /* ----------------------- Generación diaria desde BD --------------------- */
 
-/**
- * Garantiza entre 2 y 5 tareas (por defecto 3) para 'today' de un goal.
- * 1) Busca existentes de hoy.
- * 2) Si faltan, intenta elegir plantillas en BD con i18n que casen con:
- *    - categoría normalizada
- *    - nivel +-1 del goal
- *    - minutos ~ preferencia (±5)
- *    - coincidencia de tags (solapamiento)
- * 3) Si no alcanza el mínimo, hace fallback a la librería local (pickTodayTask).
- */
 export async function ensureTodayTasksForGoal(opts: {
   id: string;
   category: string;
   level: number;
   minutes_per_day?: number;
-  minutes?: number; // compat
+  minutes?: number;
 }) {
   const todayISO = new Date().toISOString().split("T")[0];
   const goalId = opts.id;
   const level = Math.max(1, Math.min(5, Number(opts.level) || 1));
   const prefMinutes = Math.max(1, Number(opts.minutes_per_day ?? opts.minutes ?? 10));
-  const DESIRED_MIN = 3; // puedes subirlo a 5 si quieres
+  const DESIRED_MIN = 3;
   const DESIRED_MAX = 5;
 
-  /* 0) Lee ya existentes para no duplicar y calcular cuántas faltan */
+  // 0) Lee existentes de hoy
   const { data: existingRows, error: existingErr } = await supabase
     .from("challenges")
     .select("id,text")
@@ -121,11 +120,11 @@ export async function ensureTodayTasksForGoal(opts: {
 
   const existing = existingRows ?? [];
   const existingTexts = new Set(existing.map((r) => r.text));
-  if (existing.length >= DESIRED_MIN) return; // ya tenemos suficientes
+  if (existing.length >= DESIRED_MIN) return;
 
   const toFill = Math.min(DESIRED_MIN, DESIRED_MAX) - existing.length;
 
-  /* 1) Carga datos del goal para user_id + form_data (cast a any por tipado) */
+  // 1) Goal -> user & form
   const { data: goal, error: goalErr } = await (supabase as any)
     .from("goals")
     .select("user_id, form_data")
@@ -134,7 +133,7 @@ export async function ensureTodayTasksForGoal(opts: {
 
   if (goalErr) throw goalErr;
 
-  /* 2) Locale del usuario (profiles.id = user_id) */
+  // 2) Locale usuario
   let locale = "es";
   let fallback = "en";
   if (goal?.user_id) {
@@ -148,15 +147,14 @@ export async function ensureTodayTasksForGoal(opts: {
     fallback = pf.fallback;
   }
 
-  /* 3) Tags derivados del formulario */
+  // 3) Tags del formulario
   const userTags = tagsFromForm(goal?.form_data);
 
-  /* 4) Filtros principales para plantillas */
+  // 4) Filtros principales para plantillas
   const dbCategory = normalizeCategory(opts.category);
   const minMin = Math.max(1, prefMinutes - 5);
   const maxMin = Math.min(60, prefMinutes + 5);
 
-  // Traemos candidatas (cast a any para evitar complain de tipos hasta regenerar types)
   const { data: rawTpls, error: tplErr } = await (supabase as any)
     .from("task_templates")
     .select("id, category, subcategory, level, kind, minutes, tags, active")
@@ -166,11 +164,9 @@ export async function ensureTodayTasksForGoal(opts: {
     .lte("level", level + 1)
     .gte("minutes", minMin)
     .lte("minutes", maxMin)
-    // Traemos bastantes y filtramos/ordenamos en cliente
     .limit(50);
 
   if (tplErr) {
-    // Si falla la consulta de BD, hacemos todo con librería local
     return await fallbackWithLocalLibrary({
       goalId,
       todayISO,
@@ -182,15 +178,14 @@ export async function ensureTodayTasksForGoal(opts: {
     });
   }
 
-  // Filtro por tags en cliente (solapamiento)
+  // Filtra por tags
   const candidates = shuffle(
     (rawTpls as any[]).filter((t) => overlaps(t.tags as string[] | null, userTags))
   );
 
-  // Recogemos los textos i18n para esas plantillas (primero 'locale', luego rellenamos con fallback)
+  // i18n
   const templateIds = candidates.map((t) => t.id);
-  let textByTpl = new Map<string, string>();
-
+  const textByTpl = new Map<string, string>();
   if (templateIds.length > 0) {
     const { data: i18nPrimary } = await (supabase as any)
       .from("task_template_i18n")
@@ -204,13 +199,11 @@ export async function ensureTodayTasksForGoal(opts: {
       .in("template_id", templateIds)
       .eq("locale", fallback);
 
-    // Primero fallback...
     (i18nFallback ?? []).forEach((r: any) => textByTpl.set(r.template_id, r.text));
-    // ...y sobrescribimos con locale principal si existe
     (i18nPrimary ?? []).forEach((r: any) => textByTpl.set(r.template_id, r.text));
   }
 
-  // Construimos nuevas tareas evitando textos ya usados
+  // Construye nuevas filas evitando textos repetidos
   const newRows: Array<{
     goal_id: string;
     day: string;
@@ -224,7 +217,7 @@ export async function ensureTodayTasksForGoal(opts: {
     if (newRows.length >= toFill) break;
     const txt = textByTpl.get(tpl.id);
     if (!txt) continue;
-    if (existingTexts.has(txt)) continue; // evita UNIQUE (goal_id,day,text)
+    if (existingTexts.has(txt)) continue;
 
     newRows.push({
       goal_id: goalId,
@@ -236,39 +229,46 @@ export async function ensureTodayTasksForGoal(opts: {
     });
   }
 
-  // Si no alcanzamos el mínimo, rellenamos con librería local
-if (newRows.length < toFill) {
-  const missing = toFill - newRows.length;
-  const extra = await generateFromLocalLibrary(
-    mapToLibraryCategory(opts.category),
-    level,
-    prefMinutes,
-    existingTexts,
-    missing
-  );
+  // Fallback local si faltan
+  if (newRows.length < toFill) {
+    const missing = toFill - newRows.length;
+    const extra = await generateFromLocalLibrary(
+      mapToLibraryCategory(opts.category),
+      level,
+      prefMinutes,
+      existingTexts,
+      missing
+    );
 
-  // añade los campos requeridos por la tabla challenges
-  newRows.push(
-    ...extra.map((r) => ({
-      goal_id: goalId,
-      day: todayISO,
-      text: r.text,
-      minutes: r.minutes,
-      kind: r.kind,
-      status: r.status,
-    }))
-  );
-}
+    newRows.push(
+      ...extra.map((r) => ({
+        goal_id: goalId,
+        day: todayISO,
+        text: r.text,
+        minutes: r.minutes,
+        kind: r.kind,
+        status: r.status,
+      }))
+    );
+  }
 
   if (newRows.length === 0) return;
 
-  const { error: insErr } = await supabase.from("challenges").insert(newRows as any[]);
-  if (insErr) {
-    // Ignoramos conflictos de UNIQUE (multi-click/refresh)
-    const msg = String((insErr as any)?.message || "");
-    const code = (insErr as any)?.code || (insErr as any)?.status;
+  // ---- UPSERT (con cast amplio para evitar choque de tipos generados) ----
+  const rowsToUpsert = buildChallengeRows(newRows);
+  const { error: upErr } = await (supabase as any)
+    .from("challenges")
+    .upsert(rowsToUpsert as any[], {
+      onConflict: "goal_id,day,text",
+      ignoreDuplicates: true,
+      returning: "minimal",
+    });
+
+  if (upErr) {
+    const msg = String((upErr as any)?.message || "");
+    const code = (upErr as any)?.code || (upErr as any)?.status;
     const isDup = code === "409" || /duplicate key|unique constraint/i.test(msg);
-    if (!isDup) throw insErr;
+    if (!isDup) throw upErr;
   }
 }
 
@@ -285,7 +285,7 @@ function mapToLibraryCategory(raw: string): string {
       finanzas: "ahorro",
       organizacion: "enfoque",
       "organización": "enfoque",
-      carrera: "idioma", // usamos set de idioma/otro como fallback
+      carrera: "idioma",
       idioma: "idioma",
     }[s] || "otro"
   );
@@ -310,9 +310,25 @@ async function fallbackWithLocalLibrary(args: {
 
   if (rows.length === 0) return;
 
-  const { error } = await supabase.from("challenges").insert(
-    rows.map((r) => ({ ...r, goal_id: args.goalId, day: args.todayISO }))
+  const rowsToUpsert = buildChallengeRows(
+    rows.map((r) => ({
+      goal_id: args.goalId,
+      day: args.todayISO,
+      text: r.text,
+      minutes: r.minutes,
+      kind: r.kind,
+      status: r.status,
+    }))
   );
+
+  const { error } = await (supabase as any)
+    .from("challenges")
+    .upsert(rowsToUpsert as any[], {
+      onConflict: "goal_id,day,text",
+      ignoreDuplicates: true,
+      returning: "minimal",
+    });
+
   if (error) {
     const msg = String((error as any)?.message || "");
     const code = (error as any)?.code || (error as any)?.status;
@@ -342,8 +358,7 @@ async function generateFromLocalLibrary(
 
   while (out.length < needed && tries < 12) {
     tries++;
-    const mins =
-      minutesCandidates[Math.min(out.length, minutesCandidates.length - 1)];
+    const mins = minutesCandidates[Math.min(out.length, minutesCandidates.length - 1)];
     const t = pickTodayTask(libCategory, level, mins, history);
     if (!t) break;
     const key = `${t.kind}|${t.text}`;
@@ -358,7 +373,7 @@ async function generateFromLocalLibrary(
     });
   }
 
-  // Si aún faltan, mete reflexiones genéricas seguras
+  // Si aún faltan, mete reflexiones genéricas
   while (out.length < needed) {
     const generic = "Escribe el micro-paso de hoy hacia tu objetivo (1 frase).";
     if (!existingTexts.has(generic)) {
