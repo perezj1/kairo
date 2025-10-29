@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -49,6 +49,10 @@ const Home = () => {
   const [todayStats, setTodayStats] = useState<TodayStats>({});
   const [loading, setLoading] = useState(true);
 
+  // --- refs para carrusel y tarjetas ---
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
   const selectedGoal = useMemo(
     () => goals.find((g) => g.id === selectedGoalId) || null,
     [goals, selectedGoalId]
@@ -65,6 +69,10 @@ const Home = () => {
     if (!user) return;
     try {
       setLoading(true);
+
+      // preserva scroll actual del carrusel
+      const prevScrollLeft = scrollerRef.current?.scrollLeft ?? 0;
+
       const { data: goalRows, error } = await supabase
         .from("goals")
         .select("*")
@@ -77,6 +85,7 @@ const Home = () => {
       const list = (goalRows || []) as Goal[];
       setGoals(list);
 
+      // mantiene selección si existe
       if (list.length > 0) {
         const stillExists = list.some((g) => g.id === selectedGoalId);
         setSelectedGoalId(stillExists ? selectedGoalId : list[0].id);
@@ -89,6 +98,11 @@ const Home = () => {
       } else {
         setTodayStats({});
       }
+
+      // restaura posición del carrusel tras render
+      requestAnimationFrame(() => {
+        if (scrollerRef.current) scrollerRef.current.scrollLeft = prevScrollLeft;
+      });
     } catch (e) {
       console.error(e);
       toast.error("No se pudieron cargar tus objetivos");
@@ -156,6 +170,14 @@ const Home = () => {
   const reloadToday = useCallback(async () => {
     if (selectedGoalId) await fetchTodayTasks(selectedGoalId);
   }, [fetchTodayTasks, selectedGoalId]);
+
+  // centra visualmente la tarjeta seleccionada
+  const handleSelectGoal = useCallback((id: string) => {
+    setSelectedGoalId(id);
+    const el = itemRefs.current[id];
+    // centra dentro del carrusel sin mover la página completa
+    el?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+  }, []);
 
   // ---------- EFFECTS ----------
   useEffect(() => {
@@ -263,16 +285,23 @@ const Home = () => {
 
         {/* Carrusel horizontal de objetivos */}
         {goals.length > 0 ? (
-          <div className="mt-4 flex gap-3 overflow-x-auto pb-2 snap-x">
+          <div
+            ref={scrollerRef}
+            className="mt-4 flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scroll-pl-4"
+          >
             {goals.map((g) => {
               const stats = todayStats[g.id] || { done: 0, total: 0 };
               const prog = stats.total === 0 ? 0 : Math.round((stats.done / stats.total) * 100);
               return (
-                <div key={g.id} className="snap-start">
+                <div
+                  key={g.id}
+                  ref={(el) => (itemRefs.current[g.id] = el)}
+                  className="snap-center shrink-0"
+                >
                   <GoalPillCard
                     goal={g}
                     selected={selectedGoalId === g.id}
-                    onSelect={() => setSelectedGoalId(g.id)}
+                    onSelect={() => handleSelectGoal(g.id)}
                     dayProgress={prog}
                     todayCount={stats.total}
                     doneCount={stats.done}
@@ -346,11 +375,7 @@ const Home = () => {
         {todayTasks.length > 0 ? (
           <div className="space-y-3">
             {todayTasks.map((t) => (
-              <DailyTaskItem
-                key={t.id}
-                task={t}
-                onStatusChange={() => reloadToday()}
-              />
+              <DailyTaskItem key={t.id} task={t} onStatusChange={() => reloadToday()} />
             ))}
           </div>
         ) : (

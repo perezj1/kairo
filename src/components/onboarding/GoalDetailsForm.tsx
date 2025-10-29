@@ -1,24 +1,30 @@
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ArrowLeft } from 'lucide-react';
-import { SaludForm } from './forms/SaludForm';
-import { AlimentacionForm } from './forms/AlimentacionForm';
-import { MentalForm } from './forms/MentalForm';
-import { FinanzasForm } from './forms/FinanzasForm';
-import { RelacionesForm } from './forms/RelacionesForm';
-import { CarreraForm } from './forms/CarreraForm';
-import { ReducirHabitosForm, type ReducirHabitosSubId } from "./forms/ReducirHabitosForm";
-import { OtrosForm } from './forms/OtrosForm';
+
+// Sub-forms con tipos para evitar TS2322
+import { SaludForm, type SaludSubId } from './forms/SaludForm';
+import { AlimentacionForm, type AlimentacionSubId } from './forms/AlimentacionForm';
+import { MentalForm, type MentalSubId } from './forms/MentalForm';
+import { FinanzasForm, type FinanzasSubId } from './forms/FinanzasForm';
+import { RelacionesForm, type RelacionesSubId } from './forms/RelacionesForm';
+import { CarreraForm, type CarreraSubId } from './forms/CarreraForm';
+import { ReducirHabitosForm, type ReducirHabitosSubId } from './forms/ReducirHabitosForm';
+import {AutocuidadoForm,  type AutocuidadoSubId } from './forms/AutocuidadoForm';
+import { OrganizacionForm, type OrganizacionSubId } from './forms/OrganizacionForm';
+import { OtrosForm, type OtrosCategoryId } from './forms/OtrosForm';
+
 import {
   DEADLINE_OPTIONS,
   TIME_OPTIONS,
   TIME_SLOT_OPTIONS,
-  LANGUAGE_LEVEL_OPTIONS,   // 👈 nuevo
-  LANGUAGE_TARGET_OPTIONS,  // 👈 nuevo
-  WEIGHT_OPTIONS            // 👈 nuevo (si usas renderOldForm)
+  LANGUAGE_LEVEL_OPTIONS,
+  LANGUAGE_TARGET_OPTIONS,
+  WEIGHT_OPTIONS,
+  getGoalName,
 } from '@/lib/categories';
-
 
 interface GoalDetailsFormProps {
   categoryId: string;
@@ -39,88 +45,105 @@ export const GoalDetailsForm = ({
   onSubmit,
   loading,
 }: GoalDetailsFormProps) => {
-  // helper para actualizar el estado del formulario
   const updateField = (key: string, value: any) => {
     onUpdate({ ...formData, [key]: value });
   };
+
+  // === Nombre del objetivo y autocompletado del título ===
+  const goalName = useMemo(
+    () => getGoalName(categoryId, subCategoryId),
+    [categoryId, subCategoryId]
+  );
+
+  const [isTitleDirty, setIsTitleDirty] = useState(false);
+
+  useEffect(() => {
+    // Si el usuario no ha tocado el título, sincroniza con el nombre del objetivo
+    if (!isTitleDirty) {
+      onUpdate({ ...formData, title: goalName });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [goalName]);
 
   const renderCategoryForm = () => {
     const forms: Record<string, JSX.Element | null> = {
       salud: (
         <SaludForm
-          subCategoryId={subCategoryId}
+          subCategoryId={subCategoryId as SaludSubId}
           formData={formData}
           onUpdate={onUpdate}
         />
       ),
       alimentacion: (
         <AlimentacionForm
-          subCategoryId={subCategoryId}
+          subCategoryId={subCategoryId as AlimentacionSubId}
           formData={formData}
           onUpdate={onUpdate}
         />
       ),
       mental: (
         <MentalForm
-          subCategoryId={subCategoryId}
+          subCategoryId={subCategoryId as MentalSubId}
           formData={formData}
           onUpdate={onUpdate}
         />
       ),
       finanzas: (
         <FinanzasForm
-          subCategoryId={subCategoryId}
+          subCategoryId={subCategoryId as FinanzasSubId}
           formData={formData}
           onUpdate={onUpdate}
         />
       ),
       relaciones: (
         <RelacionesForm
-          subCategoryId={subCategoryId}
+          subCategoryId={subCategoryId as RelacionesSubId}
           formData={formData}
           onUpdate={onUpdate}
         />
       ),
       carrera: (
         <CarreraForm
-          subCategoryId={subCategoryId}
+          subCategoryId={subCategoryId as CarreraSubId}
           formData={formData}
           onUpdate={onUpdate}
         />
       ),
-     
 
+      // Reducir hábitos: usa 'redes' (no 'redes_sociales') según tus CATEGORIES
       reducir_habitos: (
-  <>
-    {(["fumar","alcohol","azucar","redes_sociales","otro_habito"] as const).includes(subCategoryId as any) && (
-      <ReducirHabitosForm
-        subCategoryId={subCategoryId as ReducirHabitosSubId}
-        formData={formData}
-        onUpdate={onUpdate}
-        // showMinutes={false} showDeadline={false}  // si ya los muestras globalmente
-      />
-    )}
-  </>
-),
+        <>
+          {(['fumar', 'alcohol', 'azucar', 'redes', 'otro_habito'] as const).includes(
+            subCategoryId as any
+          ) && (
+            <ReducirHabitosForm
+              subCategoryId={subCategoryId as ReducirHabitosSubId}
+              formData={formData}
+              onUpdate={onUpdate}
+            />
+          )}
+        </>
+      ),
+
       organizacion: (
-        <OtrosForm
-          categoryId={categoryId}
-          subCategoryId={subCategoryId}
-          formData={formData}
-          onUpdate={onUpdate}
-        />
-      ),
+  <OrganizacionForm
+    subCategoryId={subCategoryId as OrganizacionSubId}
+    formData={formData}
+    onUpdate={onUpdate}
+  />
+),
+
       autocuidado: (
-        <OtrosForm
-          categoryId={categoryId}
-          subCategoryId={subCategoryId}
+        <AutocuidadoForm
+          subCategoryId={subCategoryId as AutocuidadoSubId}
           formData={formData}
           onUpdate={onUpdate}
         />
       ),
+
       nuevo: (
         <OtrosForm
-          categoryId={categoryId}
+          categoryId={'nuevo' as OtrosCategoryId}
           subCategoryId={subCategoryId}
           formData={formData}
           onUpdate={onUpdate}
@@ -131,8 +154,7 @@ export const GoalDetailsForm = ({
     return forms[categoryId] || null;
   };
 
-  // --- bloques opcionales/legacy (corregidos con type="button") ---
-
+  // --- bloques opcionales/legacy (si los usas) ---
   const renderOldForm = () => (
     <>
       <div>
@@ -146,6 +168,7 @@ export const GoalDetailsForm = ({
               onClick={() => {
                 updateField('targetWeight', option.value);
                 updateField('title', `Perder ${option.value}kg`);
+                setIsTitleDirty(true);
               }}
               className="h-12"
             >
@@ -220,24 +243,23 @@ export const GoalDetailsForm = ({
     </>
   );
 
-  const renderGenericForm = () => (
-    <>
-      {!(categoryId === 'salud' && subCategoryId === 'bajar_peso') && (
-        <div>
-          <Label className="text-sm font-medium">Título de tu objetivo</Label>
-          <Input
-            value={formData.title || ''}
-            onChange={(e) => updateField('title', e.target.value)}
-            placeholder="Ej: Meditar diariamente, Correr 5K..."
-            className="mt-2"
-          />
-        </div>
-      )}
-    </>
+  // 💡 Siempre mostramos el título, con default = goalName
+  const renderTitleField = () => (
+    <div>
+      <Label className="text-sm font-medium">Título del objetivo</Label>
+      <Input
+        value={formData.title ?? goalName}
+        onChange={(e) => {
+          setIsTitleDirty(true);
+          updateField('title', e.target.value);
+        }}
+        placeholder={goalName}
+        className="mt-2"
+      />
+    </div>
   );
 
   // --- render principal ---
-
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3 mb-6">
@@ -245,12 +267,15 @@ export const GoalDetailsForm = ({
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
-          <h2 className="text-2xl font-bold">Detalles del objetivo</h2>
+          {/* Encabezado = nombre del objetivo */}
+          <h2 className="text-2xl font-bold">{goalName}</h2>
           <p className="text-sm text-muted-foreground">Cuanto más específico, mejor</p>
         </div>
       </div>
 
       <div className="space-y-5">
+        {renderTitleField()}
+
         {renderCategoryForm()}
 
         {/* Campos comunes */}
@@ -321,10 +346,3 @@ export const GoalDetailsForm = ({
     </div>
   );
 };
-
-/* 
-  NOTA:
-  - WEIGHT_OPTIONS, LANGUAGE_LEVEL_OPTIONS y LANGUAGE_TARGET_OPTIONS
-    deben existir si usas renderOldForm/renderLanguageForm.
-  - Si no los usas, puedes eliminar esas funciones para simplificar.
-*/

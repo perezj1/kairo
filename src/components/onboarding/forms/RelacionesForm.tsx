@@ -2,50 +2,79 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
+// 👉 Exporta para castear en GoalDetailsForm si quieres tipado estricto
+export type RelacionesSubId = 'pareja' | 'amistades' | 'familia' | 'conocer_gente';
+
 interface RelacionesFormProps {
-  subCategoryId: string;
-  formData: any;
+  subCategoryId: RelacionesSubId;
+  formData: Record<string, any>;
   onUpdate: (data: any) => void;
 }
 
-export const RelacionesForm = ({ subCategoryId, formData, onUpdate }: RelacionesFormProps) => {
-  const updateField = (field: string, value: any) => {
+const mergeUpdate =
+  (formData: any, onUpdate: (d: any) => void) =>
+  (field: string, value: any) =>
     onUpdate({ ...formData, [field]: value });
-  };
 
+/** Grid compacto de botones */
+const ButtonsGrid = ({
+  options,
+  current,
+  onSelect,
+  cols = 3,
+  itemClass = 'h-10 text-sm',
+  multi = false,
+}: {
+  options: { id: string; label: string; value: any }[];
+  current: any;
+  onSelect: (v: any) => void;
+  cols?: 2 | 3 | 4;
+  itemClass?: string;
+  multi?: boolean;
+}) => {
+  const grid = cols === 4 ? 'grid-cols-4' : cols === 2 ? 'grid-cols-2' : 'grid-cols-3';
+  const isActive = (val: any) =>
+    multi ? Array.isArray(current) && current.includes(val) : current === val;
+
+  return (
+    <div className={`grid ${grid} gap-2 mt-2`}>
+      {options.map((o) => (
+        <Button
+          key={o.id}
+          type="button"
+          variant={isActive(o.value) ? 'default' : 'outline'}
+          onClick={() => onSelect(o.value)}
+          className={itemClass}
+        >
+          {o.label}
+        </Button>
+      ))}
+    </div>
+  );
+};
+
+export const RelacionesForm = ({ subCategoryId, formData, onUpdate }: RelacionesFormProps) => {
+  const updateField = mergeUpdate(formData, onUpdate);
+
+  // ---------- PAREJA ----------
   if (subCategoryId === 'pareja') {
     return (
       <>
         <div>
-          <Label>Título del objetivo</Label>
-          <Input
-            value={formData.title || ''}
-            onChange={(e) => updateField('title', e.target.value)}
-            placeholder="Ej: Fortalecer relación de pareja"
-            className="mt-2"
-          />
-        </div>
-
-        <div>
           <Label>Lenguaje del amor principal</Label>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            {[
+          <ButtonsGrid
+            options={[
               { id: 'palabras', label: 'Palabras de afirmación', value: 'palabras' },
               { id: 'tiempo', label: 'Tiempo de calidad', value: 'tiempo' },
               { id: 'regalos', label: 'Regalos', value: 'regalos' },
               { id: 'servicio', label: 'Actos de servicio', value: 'servicio' },
-              { id: 'contacto', label: 'Contacto físico', value: 'contacto' }
-            ].map((option) => (
-              <Button
-                key={option.id}
-                variant={formData.loveLanguage === option.value ? 'default' : 'outline'}
-                onClick={() => updateField('loveLanguage', option.value)}
-                className="h-auto py-2 text-xs"
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
+              { id: 'contacto', label: 'Contacto físico', value: 'contacto' },
+            ]}
+            current={formData.loveLanguage}
+            onSelect={(v) => updateField('loveLanguage', v)}
+            cols={2}
+            itemClass="h-auto py-2 text-xs"
+          />
         </div>
 
         <div>
@@ -71,19 +100,10 @@ export const RelacionesForm = ({ subCategoryId, formData, onUpdate }: Relaciones
     );
   }
 
+  // ---------- AMISTADES ----------
   if (subCategoryId === 'amistades') {
     return (
       <>
-        <div>
-          <Label>Título del objetivo</Label>
-          <Input
-            value={formData.title || ''}
-            onChange={(e) => updateField('title', e.target.value)}
-            placeholder="Ej: Mantener contacto con amigos"
-            className="mt-2"
-          />
-        </div>
-
         <div>
           <Label>Personas prioritarias (nombres o número)</Label>
           <Input
@@ -96,23 +116,17 @@ export const RelacionesForm = ({ subCategoryId, formData, onUpdate }: Relaciones
 
         <div>
           <Label>Frecuencia de contacto</Label>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            {[
+          <ButtonsGrid
+            options={[
               { id: 'diario', label: 'Mensaje diario', value: 'diario' },
               { id: 'semanal', label: 'Semanal', value: 'semanal' },
               { id: 'quincenal', label: 'Quincenal', value: 'quincenal' },
-              { id: 'mensual', label: 'Mensual', value: 'mensual' }
-            ].map((option) => (
-              <Button
-                key={option.id}
-                variant={formData.contactFrequency === option.value ? 'default' : 'outline'}
-                onClick={() => updateField('contactFrequency', option.value)}
-                className="h-10 text-sm"
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
+              { id: 'mensual', label: 'Mensual', value: 'mensual' },
+            ]}
+            current={formData.contactFrequency}
+            onSelect={(v) => updateField('contactFrequency', v)}
+            cols={2}
+          />
         </div>
 
         <div>
@@ -129,8 +143,8 @@ export const RelacionesForm = ({ subCategoryId, formData, onUpdate }: Relaciones
           <Label>Presupuesto mensual (CHF)</Label>
           <Input
             type="number"
-            value={formData.monthlyBudget || ''}
-            onChange={(e) => updateField('monthlyBudget', parseInt(e.target.value))}
+            value={formData.monthlyBudget ?? ''}
+            onChange={(e) => updateField('monthlyBudget', Number(e.target.value) || 0)}
             placeholder="100"
             className="mt-2"
           />
@@ -139,19 +153,10 @@ export const RelacionesForm = ({ subCategoryId, formData, onUpdate }: Relaciones
     );
   }
 
+  // ---------- FAMILIA ----------
   if (subCategoryId === 'familia') {
     return (
       <>
-        <div>
-          <Label>Título del objetivo</Label>
-          <Input
-            value={formData.title || ''}
-            onChange={(e) => updateField('title', e.target.value)}
-            placeholder="Ej: Tiempo de calidad en familia"
-            className="mt-2"
-          />
-        </div>
-
         <div>
           <Label>Miembros foco</Label>
           <Input
@@ -164,76 +169,53 @@ export const RelacionesForm = ({ subCategoryId, formData, onUpdate }: Relaciones
 
         <div>
           <Label>Rituales familiares</Label>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            {[
+          <ButtonsGrid
+            options={[
               { id: 'comida', label: 'Comida juntos', value: 'comida' },
               { id: 'paseo', label: 'Paseo/excursión', value: 'paseo' },
               { id: 'juego', label: 'Juegos de mesa', value: 'juego' },
-              { id: 'pelicula', label: 'Película', value: 'pelicula' }
-            ].map((option) => (
-              <Button
-                key={option.id}
-                variant={formData.ritual === option.value ? 'default' : 'outline'}
-                onClick={() => updateField('ritual', option.value)}
-                className="h-10 text-sm"
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
+              { id: 'pelicula', label: 'Película', value: 'pelicula' },
+            ]}
+            current={formData.ritual}
+            onSelect={(v) => updateField('ritual', v)}
+            cols={2}
+          />
         </div>
 
         <div>
           <Label>Duración por sesión (minutos)</Label>
-          <div className="grid grid-cols-4 gap-2 mt-2">
-            {[30, 60, 90, 120].map((mins) => (
-              <Button
-                key={mins}
-                variant={formData.sessionDuration === mins ? 'default' : 'outline'}
-                onClick={() => updateField('sessionDuration', mins)}
-                className="h-10 text-sm"
-              >
-                {mins}m
-              </Button>
-            ))}
-          </div>
+          <ButtonsGrid
+            options={[30, 60, 90, 120].map((m) => ({
+              id: String(m),
+              label: `${m}m`,
+              value: m,
+            }))}
+            current={formData.sessionDuration}
+            onSelect={(v) => updateField('sessionDuration', v)}
+            cols={4}
+          />
         </div>
 
         <div>
           <Label>Días preferidos</Label>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            {[
+          <ButtonsGrid
+            options={[
               { id: 'entre_semana', label: 'Entre semana', value: 'entre_semana' },
-              { id: 'fin_semana', label: 'Fin de semana', value: 'fin_semana' }
-            ].map((option) => (
-              <Button
-                key={option.id}
-                variant={formData.preferredDays === option.value ? 'default' : 'outline'}
-                onClick={() => updateField('preferredDays', option.value)}
-                className="h-10 text-sm"
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
+              { id: 'fin_semana', label: 'Fin de semana', value: 'fin_semana' },
+            ]}
+            current={formData.preferredDays}
+            onSelect={(v) => updateField('preferredDays', v)}
+            cols={2}
+          />
         </div>
       </>
     );
   }
 
+  // ---------- CONOCER GENTE ----------
   if (subCategoryId === 'conocer_gente') {
     return (
       <>
-        <div>
-          <Label>Título del objetivo</Label>
-          <Input
-            value={formData.title || ''}
-            onChange={(e) => updateField('title', e.target.value)}
-            placeholder="Ej: Ampliar círculo social"
-            className="mt-2"
-          />
-        </div>
-
         <div>
           <Label>Intereses principales</Label>
           <Input
@@ -246,59 +228,45 @@ export const RelacionesForm = ({ subCategoryId, formData, onUpdate }: Relaciones
 
         <div>
           <Label>Formato preferido</Label>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            {[
+          <ButtonsGrid
+            options={[
               { id: 'clase', label: 'Clase/taller', value: 'clase' },
               { id: 'evento', label: 'Eventos', value: 'evento' },
               { id: 'deporte', label: 'Deporte', value: 'deporte' },
-              { id: 'voluntariado', label: 'Voluntariado', value: 'voluntariado' }
-            ].map((option) => (
-              <Button
-                key={option.id}
-                variant={formData.format === option.value ? 'default' : 'outline'}
-                onClick={() => updateField('format', option.value)}
-                className="h-10 text-sm"
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
+              { id: 'voluntariado', label: 'Voluntariado', value: 'voluntariado' },
+            ]}
+            current={formData.format}
+            onSelect={(v) => updateField('format', v)}
+            cols={2}
+          />
         </div>
 
         <div>
           <Label>Frecuencia semanal</Label>
-          <div className="grid grid-cols-3 gap-2 mt-2">
-            {[1, 2, 3].map((times) => (
-              <Button
-                key={times}
-                variant={formData.weeklyFrequency === times ? 'default' : 'outline'}
-                onClick={() => updateField('weeklyFrequency', times)}
-                className="h-10"
-              >
-                {times}x/sem
-              </Button>
-            ))}
-          </div>
+          <ButtonsGrid
+            options={[1, 2, 3].map((t) => ({
+              id: String(t),
+              label: `${t}x/sem`,
+              value: t,
+            }))}
+            current={formData.weeklyFrequency}
+            onSelect={(v) => updateField('weeklyFrequency', v)}
+          />
         </div>
 
         <div>
           <Label>Nivel de introversión</Label>
-          <div className="grid grid-cols-3 gap-2 mt-2">
-            {[
+          <ButtonsGrid
+            options={[
               { id: 'extrovertido', label: 'Extrovertido', value: 'extrovertido' },
               { id: 'ambivertido', label: 'Ambivertido', value: 'ambivertido' },
-              { id: 'introvertido', label: 'Introvertido', value: 'introvertido' }
-            ].map((option) => (
-              <Button
-                key={option.id}
-                variant={formData.socialLevel === option.value ? 'default' : 'outline'}
-                onClick={() => updateField('socialLevel', option.value)}
-                className="h-10 text-xs"
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
+              { id: 'introvertido', label: 'Introvertido', value: 'introvertido' },
+            ]}
+            current={formData.socialLevel}
+            onSelect={(v) => updateField('socialLevel', v)}
+            cols={3}
+            itemClass="h-10 text-xs"
+          />
         </div>
       </>
     );

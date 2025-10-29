@@ -1,6 +1,8 @@
 // Task Planner Engine for KAIRO
 // Generates daily micro-tasks based on goal, level, and user preferences
 
+import { buildTasks as buildGoalTasks } from '@/lib/taskTemplates';
+
 export type TaskKind = "accion" | "educacion" | "reflexion";
 
 export interface Task {
@@ -110,7 +112,23 @@ const TASK_LIBRARY: Task[] = [
 ];
 
 /* ------------------------------------------------------------------ */
-/*                         TASK PICKER LOGIC                           */
+/*                     UTILIDADES DE SELECCIÓN                         */
+/* ------------------------------------------------------------------ */
+
+function avoidRepetition(pool: Task[], history: TaskHistory[]): Task[] {
+  const recentKinds = history.slice(-2).map((h) => h.kind as TaskKind);
+  let out = pool;
+  if (recentKinds.length === 2 && recentKinds[0] === recentKinds[1]) {
+    const different = pool.filter((t) => t.kind !== recentKinds[0]);
+    if (different.length > 0) out = different;
+  }
+  const recentTexts = new Set(history.slice(-5).map((h) => h.text));
+  const novel = out.filter((t) => !recentTexts.has(t.text));
+  return novel.length > 0 ? novel : out;
+}
+
+/* ------------------------------------------------------------------ */
+/*                         TASK PICKER LEGACY                          */
 /* ------------------------------------------------------------------ */
 
 export function pickTodayTask(
@@ -119,30 +137,15 @@ export function pickTodayTask(
   minutesPreferred: number,
   history: TaskHistory[]
 ): Task | null {
-  // 1) Filtrado por categoría y nivel (tolerancia ±1) y minutos (±5)
   const eligible = TASK_LIBRARY.filter(
     (task) =>
       task.category === category &&
       Math.abs(task.level - level) <= 1 &&
       Math.abs(task.minutes - minutesPreferred) <= 5
   );
-
   if (eligible.length === 0) return null;
 
-  // 2) Evitar repetir el mismo "kind" dos veces seguidas
-  const recentKinds = history.slice(-2).map((h) => h.kind as TaskKind);
-  let pool = eligible;
-  if (recentKinds.length === 2 && recentKinds[0] === recentKinds[1]) {
-    const different = eligible.filter((t) => t.kind !== recentKinds[0]);
-    if (different.length > 0) pool = different;
-  }
-
-  // 3) Evitar repetir texto exacto de los últimos 5 días
-  const recentTexts = new Set(history.slice(-5).map((h) => h.text));
-  const novel = pool.filter((t) => !recentTexts.has(t.text));
-  const finalPool = novel.length > 0 ? novel : pool;
-
-  // 4) Selección aleatoria
+  const finalPool = avoidRepetition(eligible, history);
   return finalPool[Math.floor(Math.random() * finalPool.length)];
 }
 
@@ -150,10 +153,6 @@ export function pickTodayTask(
 /*                         CATEGORY HELPERS                            */
 /* ------------------------------------------------------------------ */
 
-/**
- * Normaliza nombres de categoría (onboarding/BBDD/legacy) → slug interno.
- * Mapeamos además las categorías legacy (idioma, ahorro, enfoque) a las 9 actuales.
- */
 type CategorySlug =
   | "salud_fisica"
   | "alimentacion"
@@ -179,19 +178,15 @@ function normalizeCategory(raw?: string): CategorySlug {
   if (/(autocuidado|estilo de vida|selfcare|otro)/i.test(s)) return "autocuidado";
 
   // Legacy explícitos
-  if (/idioma/.test(s)) return "carrera";       // lo asociamos a "aprendizaje"
+  if (/idioma/.test(s)) return "carrera";       // aprendizaje
   if (/enfoque/.test(s)) return "organizacion"; // productividad
-  // ahorro ya resuelto arriba → finanzas
 
-  // Fallback
   return "salud_fisica";
 }
 
-/** Iconos (emojis) – mantenemos los tuyos y añadimos equivalentes por slug */
+/** Icono por categoría (compat + slug) */
 export function getCategoryIcon(category: string): string {
   const s = category.toLowerCase().trim();
-
-  // tu mapping original (compat)
   const legacy: Record<string, string> = {
     salud: "💪",
     alimentacion: "🥗",
@@ -210,7 +205,6 @@ export function getCategoryIcon(category: string): string {
   };
   if (legacy[s]) return legacy[s];
 
-  // slug normalizado (9 categorías)
   const slug = normalizeCategory(category);
   const bySlug: Record<CategorySlug, string> = {
     salud_fisica: "💪",
@@ -226,22 +220,9 @@ export function getCategoryIcon(category: string): string {
   return bySlug[slug] ?? "✨";
 }
 
-/**
- * Color de tarjeta por categoría: devolvemos un **CSS gradient** basado en tu paleta:
- * GRAPEFRUIT  #ED5565→#DA4453
- * BITTERSWEET #FC6E51→#E9573F
- * SUNFLOWER   #FFCE54→#F6BB42
- * GRASS       #A0D468→#8CC152
- * MINT        #48CFAD→#37BC9B
- * AQUA        #4FC1E9→#3BAFDA
- * BLUE JEANS  #5D9CEC→#4A89DC
- * LAVANDER    #AC92EC→#967ADC
- * PINK ROSE   #EC87C0→#D770AD
- */
+/** Gradiente por categoría (compat + slug) */
 export function getCategoryColor(category: string): string {
-  // Primero respetamos tus claves legacy si alguien las usa en otros sitios
   const named: Record<string, string> = {
-    // mapea "tokens" antiguos a gradientes también
     mint: "linear-gradient(160deg,#48CFAD 0%,#37BC9B 100%)",
     green: "linear-gradient(160deg,#A0D468 0%,#8CC152 100%)",
     purple: "linear-gradient(160deg,#AC92EC 0%,#967ADC 100%)",
@@ -256,19 +237,73 @@ export function getCategoryColor(category: string): string {
   };
   if (named[category]) return named[category];
 
-  // Después, usamos el slug normalizado (9 categorías)
   const slug = normalizeCategory(category);
   const bySlug: Record<CategorySlug, string> = {
-    salud_fisica: "linear-gradient(160deg,#5D9CEC 0%,#4A89DC 100%)", // BLUE JEANS
-    alimentacion: "linear-gradient(160deg,#A0D468 0%,#8CC152 100%)", // GRASS
-    salud_mental: "linear-gradient(160deg,#48CFAD 0%,#37BC9B 100%)", // MINT
-    finanzas: "linear-gradient(160deg,#FFCE54 0%,#F6BB42 100%)",     // SUNFLOWER
-    relaciones: "linear-gradient(160deg,#EC87C0 0%,#D770AD 100%)",   // PINK ROSE
-    carrera: "linear-gradient(160deg,#4FC1E9 0%,#3BAFDA 100%)",      // AQUA
-    habitos_nocivos: "linear-gradient(160deg,#FC6E51 0%,#E9573F 100%)", // BITTERSWEET
-    organizacion: "linear-gradient(160deg,#AC92EC 0%,#967ADC 100%)", // LAVANDER
-    autocuidado: "linear-gradient(160deg,#ED5565 0%,#DA4453 100%)",  // GRAPEFRUIT
+    salud_fisica: "linear-gradient(160deg,#5D9CEC 0%,#4A89DC 100%)",
+    alimentacion: "linear-gradient(160deg,#A0D468 0%,#8CC152 100%)",
+    salud_mental: "linear-gradient(160deg,#48CFAD 0%,#37BC9B 100%)",
+    finanzas: "linear-gradient(160deg,#FFCE54 0%,#F6BB42 100%)",
+    relaciones: "linear-gradient(160deg,#EC87C0 0%,#D770AD 100%)",
+    carrera: "linear-gradient(160deg,#4FC1E9 0%,#3BAFDA 100%)",
+    habitos_nocivos: "linear-gradient(160deg,#FC6E51 0%,#E9573F 100%)",
+    organizacion: "linear-gradient(160deg,#AC92EC 0%,#967ADC 100%)",
+    autocuidado: "linear-gradient(160deg,#ED5565 0%,#DA4453 100%)",
   };
 
   return bySlug[slug] ?? "var(--gradient-hero)";
+}
+
+/* ------------------------------------------------------------------ */
+/*           NUEVO: PICKER BASADO EN GOALS (plantillas dinámicas)     */
+/* ------------------------------------------------------------------ */
+
+// Adaptamos la plantilla (taskTemplates.ts) al formato de este motor
+function adaptTemplateToEngine(t: any, categoryId: string): Task {
+  const text = t.description ? `${t.title} — ${t.description}` : t.title;
+  // Kind heurístico (podemos mejorarlo por tags si quieres)
+  const kind: TaskKind = 'accion';
+  return {
+    kind,
+    minutes: Number(t.minutes) || 10,
+    text,
+    category: categoryId,    // mantenemos el id de tu categoría
+    level: 2,                // neutro; si luego añades “nivel” en BD, lo mapeamos
+    tags: Array.isArray(t.tags) ? t.tags : [],
+  };
+}
+
+/**
+ * Genera tareas desde las plantillas del objetivo (categoryId, subCategoryId, formData),
+ * las adapta al motor y elige una para hoy. Si no hay plantillas, cae a pickTodayTask.
+ */
+export function pickTodayTaskFromGoal(
+  categoryId: string,
+  subCategoryId: string,
+  formData: any,
+  history: TaskHistory[],
+  minutesPreferred?: number,
+  level: number = 2
+): Task | null {
+  const templates = buildGoalTasks(categoryId, subCategoryId, formData);
+  if (templates.length === 0) {
+    // Fallback a la librería legacy (por compatibilidad)
+    const categoryForLegacy = categoryId; // puedes mapear si usas otros slugs
+    return pickTodayTask(categoryForLegacy, level, minutesPreferred ?? 10, history);
+  }
+
+  const dynamicTasks = templates.map((t) => adaptTemplateToEngine(t, categoryId));
+
+  // Filtrado suave por minutos si viene preferencia
+  let pool = dynamicTasks;
+  if (typeof minutesPreferred === 'number') {
+    const tol = 7; // tolerancia
+    const filtered = dynamicTasks.filter(
+      (t) => Math.abs(t.minutes - minutesPreferred) <= tol
+    );
+    if (filtered.length > 0) pool = filtered;
+  }
+
+  // Evitar repeticiones como en el motor legacy
+  const finalPool = avoidRepetition(pool, history);
+  return finalPool[Math.floor(Math.random() * finalPool.length)];
 }

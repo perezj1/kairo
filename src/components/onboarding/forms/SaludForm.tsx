@@ -1,403 +1,180 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  WEIGHT_OPTIONS,
-  ACTIVITY_LEVEL_OPTIONS,
-  EQUIPMENT_OPTIONS,
-  FREQUENCY_OPTIONS,
-} from '@/lib/categories';
+import { FREQUENCY_OPTIONS } from '@/lib/categories';
+
+export type SaludSubId =
+  | 'bajar_peso'
+  | 'ganar_musculo'
+  | 'cardio'
+  | 'movilidad'
+  | 'mantener_activo';
 
 interface SaludFormProps {
-  subCategoryId: string;
-  formData: any;
+  subCategoryId: SaludSubId;
+  formData: Record<string, any>;
   onUpdate: (data: any) => void;
 }
 
-export const SaludForm = ({ subCategoryId, formData, onUpdate }: SaludFormProps) => {
-  const updateField = (field: string, value: any) => {
+/** util para merge */
+const mergeUpdate =
+  (formData: any, onUpdate: (d: any) => void) =>
+  (field: string, value: any) =>
     onUpdate({ ...formData, [field]: value });
-  };
 
-  /* ─────────────────────────────
-   * BAJAR PESO
-   * ────────────────────────────*/
+/** grid compacto de botones */
+const ButtonsGrid = ({
+  options,
+  current,
+  onSelect,
+  cols = 3,
+  itemClass = 'h-10 text-sm',
+}: {
+  options: { id: string; label: string; value: any }[];
+  current: any;
+  onSelect: (v: any) => void;
+  cols?: 2 | 3 | 4;
+  itemClass?: string;
+}) => {
+  const grid = cols === 4 ? 'grid-cols-4' : cols === 2 ? 'grid-cols-2' : 'grid-cols-3';
+  return (
+    <div className={`grid ${grid} gap-2 mt-2`}>
+      {options.map((o) => (
+        <Button
+          key={o.id}
+          variant={current === o.value ? 'default' : 'outline'}
+          onClick={() => onSelect(o.value)}
+          className={itemClass}
+          type="button"
+        >
+          {o.label}
+        </Button>
+      ))}
+    </div>
+  );
+};
+
+export const SaludForm = ({ subCategoryId, formData, onUpdate }: SaludFormProps) => {
+  const updateField = mergeUpdate(formData, onUpdate);
+
+  // ---------- BAJAR PESO (mínimo) ----------
   if (subCategoryId === 'bajar_peso') {
     return (
       <>
-        {/* ¿Cuántos kilos quieres perder? */}
         <div>
-          <Label className="text-sm font-medium">¿Cuántos kilos quieres perder?</Label>
-          <div className="grid grid-cols-3 gap-2 mt-2">
-            {WEIGHT_OPTIONS.map((option) => (
-              <Button
-                type="button"
-                key={option.id}
-                aria-pressed={formData.targetWeight === option.value}
-                variant={formData.targetWeight === option.value ? 'default' : 'outline'}
-                onClick={() => {
-                  updateField('targetWeight', option.value);
-                  if (!formData.title) updateField('title', `Perder ${option.value}kg`);
-                }}
-                className="h-12"
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        {/* Nivel actual */}
-        <div>
-          <Label className="text-sm font-medium">Nivel actual</Label>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            {[
+          <Label>Nivel actual</Label>
+          <ButtonsGrid
+            options={[
               { id: '1', label: 'Principiante', value: 1 },
               { id: '2', label: 'Intermedio', value: 2 },
               { id: '3', label: 'Avanzado', value: 3 },
-            ].map((option) => (
-              <Button
-                type="button"
-                key={option.id}
-                aria-pressed={formData.currentLevel === option.value}
-                variant={formData.currentLevel === option.value ? 'default' : 'outline'}
-                onClick={() => updateField('currentLevel', option.value)}
-                className="h-10 text-sm"
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        {/* Peso inicial */}
-        <div>
-          <Label className="text-sm font-medium">Peso inicial (kg)</Label>
-          <Input
-            inputMode="decimal"
-            pattern="[0-9]*"
-            value={formData.initialWeight ?? ''}
-            onChange={(e) => {
-              const v = e.target.value;
-              updateField('initialWeight', v === '' ? '' : Number(v));
-            }}
-            placeholder="70"
-            className="mt-2"
+            ]}
+            current={formData.currentLevel}
+            onSelect={(v) => updateField('currentLevel', v)}
+            cols={3}
           />
         </div>
 
-        {/* Actividad actual */}
         <div>
-          <Label className="text-sm font-medium">Actividad actual</Label>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            {ACTIVITY_LEVEL_OPTIONS.map((option) => (
-              <Button
-                type="button"
-                key={option.id}
-                aria-pressed={formData.activityLevel === option.value}
-                variant={formData.activityLevel === option.value ? 'default' : 'outline'}
-                onClick={() => updateField('activityLevel', option.value)}
-                className="h-auto py-2 text-xs"
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        {/* Equipo disponible */}
-        <div>
-          <Label className="text-sm font-medium">Equipo disponible</Label>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            {EQUIPMENT_OPTIONS.map((option) => (
-              <Button
-                type="button"
-                key={option.id}
-                aria-pressed={formData.equipment === option.value}
-                variant={formData.equipment === option.value ? 'default' : 'outline'}
-                onClick={() => updateField('equipment', option.value)}
-                className="h-10 text-sm"
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        {/* Lesiones (opcional) */}
-        <div>
-          <Label className="text-sm font-medium">¿Tienes lesiones? (opcional)</Label>
-          <Input
-            value={formData.injuries ?? ''}
-            onChange={(e) => updateField('injuries', e.target.value)}
-            placeholder="Ej: Rodilla derecha"
-            className="mt-2"
+          <Label>Frecuencia semanal</Label>
+          <ButtonsGrid
+            options={FREQUENCY_OPTIONS.slice(0, 5).map((o) => ({
+              id: o.id,
+              label: o.label.split('/')[0],
+              value: o.value,
+            }))}
+            current={formData.frequency}
+            onSelect={(v) => updateField('frequency', v)}
           />
-        </div>
-
-        {/* Hora de cierre de cocina */}
-        <div>
-          <Label className="text-sm font-medium">Hora de cierre de cocina</Label>
-          <Input
-            type="time"
-            value={formData.kitchenCloseTime ?? '20:00'}
-            onChange={(e) => updateField('kitchenCloseTime', e.target.value)}
-            className="mt-2"
-          />
-        </div>
-
-        {/* Días flexibles por semana */}
-        <div>
-          <Label className="text-sm font-medium">Días flexibles por semana</Label>
-          <div className="grid grid-cols-3 gap-2 mt-2">
-            {[0, 1, 2].map((days) => (
-              <Button
-                type="button"
-                key={days}
-                aria-pressed={formData.flexibleDays === days}
-                variant={formData.flexibleDays === days ? 'default' : 'outline'}
-                onClick={() => updateField('flexibleDays', days)}
-                className="h-10"
-              >
-                {days} días
-              </Button>
-            ))}
-          </div>
         </div>
       </>
     );
   }
 
-  /* ─────────────────────────────
-   * GANAR MÚSCULO
-   * ────────────────────────────*/
+  // ---------- GANAR MÚSCULO (mínimo) ----------
   if (subCategoryId === 'ganar_musculo') {
     return (
       <>
         <div>
-          <Label className="text-sm font-medium">Título del objetivo</Label>
-          <Input
-            value={formData.title || ''}
-            onChange={(e) => updateField('title', e.target.value)}
-            placeholder="Ej: Ganar masa muscular"
-            className="mt-2"
-          />
-        </div>
-
-        <div>
-          <Label className="text-sm font-medium">Zonas prioritarias</Label>
+          <Label>Zonas prioritarias (opcional)</Label>
           <Input
             value={formData.targetZones || ''}
             onChange={(e) => updateField('targetZones', e.target.value)}
-            placeholder="Ej: Piernas, brazos, core"
+            placeholder="Ej: Piernas, espalda, core"
             className="mt-2"
           />
         </div>
 
         <div>
-          <Label className="text-sm font-medium">Frecuencia semanal</Label>
-          <div className="grid grid-cols-3 gap-2 mt-2">
-            {FREQUENCY_OPTIONS.slice(0, 5).map((option) => (
-              <Button
-                type="button"
-                key={option.id}
-                aria-pressed={formData.frequency === option.value}
-                variant={formData.frequency === option.value ? 'default' : 'outline'}
-                onClick={() => updateField('frequency', option.value)}
-                className="h-10 text-sm"
-              >
-                {option.label.split('/')[0]}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <Label className="text-sm font-medium">Equipo disponible</Label>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            {EQUIPMENT_OPTIONS.map((option) => (
-              <Button
-                type="button"
-                key={option.id}
-                aria-pressed={formData.equipment === option.value}
-                variant={formData.equipment === option.value ? 'default' : 'outline'}
-                onClick={() => updateField('equipment', option.value)}
-                className="h-10 text-sm"
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <Label className="text-sm font-medium">Experiencia técnica</Label>
-          <div className="grid grid-cols-3 gap-2 mt-2">
-            {[
+          <Label>Experiencia</Label>
+          <ButtonsGrid
+            options={[
               { id: 'baja', label: 'Baja', value: 'baja' },
               { id: 'media', label: 'Media', value: 'media' },
               { id: 'alta', label: 'Alta', value: 'alta' },
-            ].map((option) => (
-              <Button
-                type="button"
-                key={option.id}
-                aria-pressed={formData.experience === option.value}
-                variant={formData.experience === option.value ? 'default' : 'outline'}
-                onClick={() => updateField('experience', option.value)}
-                className="h-10"
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
+            ]}
+            current={formData.experience}
+            onSelect={(v) => updateField('experience', v)}
+          />
         </div>
 
         <div>
-          <Label className="text-sm font-medium">Objetivo secundario</Label>
-          <div className="grid grid-cols-3 gap-2 mt-2">
-            {[
-              { id: 'fuerza', label: 'Fuerza', value: 'fuerza' },
-              { id: 'estetica', label: 'Estética', value: 'estetica' },
-              { id: 'rendimiento', label: 'Rendimiento', value: 'rendimiento' },
-            ].map((option) => (
-              <Button
-                type="button"
-                key={option.id}
-                aria-pressed={formData.secondaryGoal === option.value}
-                variant={formData.secondaryGoal === option.value ? 'default' : 'outline'}
-                onClick={() => updateField('secondaryGoal', option.value)}
-                className="h-10 text-xs"
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
+          <Label>Frecuencia semanal</Label>
+          <ButtonsGrid
+            options={FREQUENCY_OPTIONS.slice(0, 5).map((o) => ({
+              id: o.id,
+              label: o.label.split('/')[0],
+              value: o.value,
+            }))}
+            current={formData.frequency}
+            onSelect={(v) => updateField('frequency', v)}
+          />
         </div>
       </>
     );
   }
 
-  /* ─────────────────────────────
-   * CARDIO
-   * ────────────────────────────*/
+  // ---------- CARDIO / RESISTENCIA (mínimo) ----------
   if (subCategoryId === 'cardio') {
     return (
       <>
         <div>
-          <Label className="text-sm font-medium">Título del objetivo</Label>
-          <Input
-            value={formData.title || ''}
-            onChange={(e) => updateField('title', e.target.value)}
-            placeholder="Ej: Mejorar resistencia cardiovascular"
-            className="mt-2"
+          <Label>Modalidad preferida</Label>
+          <ButtonsGrid
+            options={[
+              { id: 'caminar', label: 'Caminar', value: 'caminar' },
+              { id: 'correr', label: 'Correr', value: 'correr' },
+              { id: 'bici', label: 'Bicicleta', value: 'bici' },
+              { id: 'hiit', label: 'HIIT', value: 'hiit' },
+            ]}
+            current={formData.modality}
+            onSelect={(v) => updateField('modality', v)}
+            cols={2}
           />
         </div>
 
         <div>
-          <Label className="text-sm font-medium">Modalidad preferida</Label>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            {[
-              { id: 'caminar', label: 'Caminar', value: 'caminar' },
-              { id: 'correr', label: 'Correr', value: 'correr' },
-              { id: 'bici', label: 'Bicicleta', value: 'bici' },
-              { id: 'hiit', label: 'HIIT suave', value: 'hiit' },
-            ].map((option) => (
-              <Button
-                type="button"
-                key={option.id}
-                aria-pressed={formData.modality === option.value}
-                variant={formData.modality === option.value ? 'default' : 'outline'}
-                onClick={() => updateField('modality', option.value)}
-                className="h-10 text-sm"
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <Label className="text-sm font-medium">Frecuencia semanal</Label>
-          <div className="grid grid-cols-3 gap-2 mt-2">
-            {FREQUENCY_OPTIONS.slice(0, 5).map((option) => (
-              <Button
-                type="button"
-                key={option.id}
-                aria-pressed={formData.frequency === option.value}
-                variant={formData.frequency === option.value ? 'default' : 'outline'}
-                onClick={() => updateField('frequency', option.value)}
-                className="h-10 text-sm"
-              >
-                {option.label.split('/')[0]}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <Label className="text-sm font-medium">Entorno</Label>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            {[
-              { id: 'exterior', label: 'Exterior', value: 'exterior' },
-              { id: 'cinta', label: 'Cinta/Gimnasio', value: 'cinta' },
-            ].map((option) => (
-              <Button
-                type="button"
-                key={option.id}
-                aria-pressed={formData.environment === option.value}
-                variant={formData.environment === option.value ? 'default' : 'outline'}
-                onClick={() => updateField('environment', option.value)}
-                className="h-10 text-sm"
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <Label className="text-sm font-medium">Condición actual</Label>
-          <div className="grid grid-cols-3 gap-2 mt-2">
-            {[
-              { id: 'baja', label: 'Baja', value: 'baja' },
-              { id: 'media', label: 'Media', value: 'media' },
-              { id: 'buena', label: 'Buena', value: 'buena' },
-            ].map((option) => (
-              <Button
-                type="button"
-                key={option.id}
-                aria-pressed={formData.condition === option.value}
-                variant={formData.condition === option.value ? 'default' : 'outline'}
-                onClick={() => updateField('condition', option.value)}
-                className="h-10"
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
+          <Label>Frecuencia semanal</Label>
+          <ButtonsGrid
+            options={FREQUENCY_OPTIONS.slice(0, 5).map((o) => ({
+              id: o.id,
+              label: o.label.split('/')[0],
+              value: o.value,
+            }))}
+            current={formData.frequency}
+            onSelect={(v) => updateField('frequency', v)}
+          />
         </div>
       </>
     );
   }
 
-  /* ─────────────────────────────
-   * MOVILIDAD
-   * ────────────────────────────*/
+  // ---------- MOVILIDAD (mínimo) ----------
   if (subCategoryId === 'movilidad') {
     return (
       <>
         <div>
-          <Label className="text-sm font-medium">Título del objetivo</Label>
-          <Input
-            value={formData.title || ''}
-            onChange={(e) => updateField('title', e.target.value)}
-            placeholder="Ej: Mejorar movilidad lumbar"
-            className="mt-2"
-          />
-        </div>
-
-        <div>
-          <Label className="text-sm font-medium">Zona principal</Label>
+          <Label>Zona principal</Label>
           <Input
             value={formData.targetZone || ''}
             onChange={(e) => updateField('targetZone', e.target.value)}
@@ -407,107 +184,51 @@ export const SaludForm = ({ subCategoryId, formData, onUpdate }: SaludFormProps)
         </div>
 
         <div>
-          <Label className="text-sm font-medium">Situación de dolor</Label>
-          <div className="grid grid-cols-3 gap-2 mt-2">
-            {[
-              { id: 'sin_dolor', label: 'Sin dolor', value: 'sin_dolor' },
-              { id: 'leve', label: 'Leve', value: 'leve' },
-              { id: 'moderado', label: 'Moderado', value: 'moderado' },
-            ].map((option) => (
-              <Button
-                type="button"
-                key={option.id}
-                aria-pressed={formData.painLevel === option.value}
-                variant={formData.painLevel === option.value ? 'default' : 'outline'}
-                onClick={() => updateField('painLevel', option.value)}
-                className="h-10 text-xs"
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <Label className="text-sm font-medium">Rigidez actual</Label>
-          <div className="grid grid-cols-3 gap-2 mt-2">
-            {[
+          <Label>Nivel de rigidez</Label>
+          <ButtonsGrid
+            options={[
               { id: 'baja', label: 'Baja', value: 'baja' },
               { id: 'media', label: 'Media', value: 'media' },
               { id: 'alta', label: 'Alta', value: 'alta' },
-            ].map((option) => (
-              <Button
-                type="button"
-                key={option.id}
-                aria-pressed={formData.stiffness === option.value}
-                variant={formData.stiffness === option.value ? 'default' : 'outline'}
-                onClick={() => updateField('stiffness', option.value)}
-                className="h-10"
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
+            ]}
+            current={formData.stiffness}
+            onSelect={(v) => updateField('stiffness', v)}
+          />
         </div>
       </>
     );
   }
 
-  /* ─────────────────────────────
-   * MANTENER ACTIVO
-   * ────────────────────────────*/
+  // ---------- MANTENER ACTIVO (mínimo) ----------
   if (subCategoryId === 'mantener_activo') {
     return (
       <>
         <div>
-          <Label className="text-sm font-medium">Título del objetivo</Label>
-          <Input
-            value={formData.title || ''}
-            onChange={(e) => updateField('title', e.target.value)}
-            placeholder="Ej: Mantenerme activo diariamente"
-            className="mt-2"
+          <Label>Objetivo de pasos</Label>
+          <ButtonsGrid
+            options={[
+              { id: '5000', label: '5.000', value: 5000 },
+              { id: '7500', label: '7.500', value: 7500 },
+              { id: '10000', label: '10.000', value: 10000 },
+            ]}
+            current={formData.stepsGoal}
+            onSelect={(v) => updateField('stepsGoal', v)}
+            cols={3}
           />
         </div>
 
         <div>
-          <Label className="text-sm font-medium">Objetivo de pasos diarios</Label>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            {[
-              { id: '5000', label: '5,000 pasos', value: 5000 },
-              { id: '7500', label: '7,500 pasos', value: 7500 },
-              { id: '10000', label: '10,000 pasos', value: 10000 },
-              { id: '12500', label: '12,500 pasos', value: 12500 },
-            ].map((option) => (
-              <Button
-                type="button"
-                key={option.id}
-                aria-pressed={formData.stepsGoal === option.value}
-                variant={formData.stepsGoal === option.value ? 'default' : 'outline'}
-                onClick={() => updateField('stepsGoal', option.value)}
-                className="h-10 text-sm"
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <Label className="text-sm font-medium">Días activos por semana</Label>
-          <div className="grid grid-cols-4 gap-2 mt-2">
-            {[5, 6, 7].map((days) => (
-              <Button
-                type="button"
-                key={days}
-                aria-pressed={formData.activeDays === days}
-                variant={formData.activeDays === days ? 'default' : 'outline'}
-                onClick={() => updateField('activeDays', days)}
-                className="h-10"
-              >
-                {days} días
-              </Button>
-            ))}
-          </div>
+          <Label>Días activos por semana</Label>
+          <ButtonsGrid
+            options={[3, 4, 5, 6, 7].map((d) => ({
+              id: String(d),
+              label: `${d} días`,
+              value: d,
+            }))}
+            current={formData.activeDays}
+            onSelect={(v) => updateField('activeDays', v)}
+            cols={4}
+          />
         </div>
       </>
     );

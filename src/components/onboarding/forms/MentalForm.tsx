@@ -2,48 +2,79 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
+// 👉 Exporta el union para poder castear desde GoalDetailsForm si quieres
+export type MentalSubId =
+  | 'reducir_estres'
+  | 'dormir_mejor'
+  | 'mindfulness'
+  | 'menos_pantalla';
+
 interface MentalFormProps {
-  subCategoryId: string;
-  formData: any;
+  subCategoryId: MentalSubId;
+  formData: Record<string, any>;
   onUpdate: (data: any) => void;
 }
 
-export const MentalForm = ({ subCategoryId, formData, onUpdate }: MentalFormProps) => {
-  const updateField = (field: string, value: any) => {
+const mergeUpdate =
+  (formData: any, onUpdate: (d: any) => void) =>
+  (field: string, value: any) =>
     onUpdate({ ...formData, [field]: value });
-  };
 
+/** Grid compacto de botones */
+const ButtonsGrid = ({
+  options,
+  current,
+  onSelect,
+  cols = 3,
+  itemClass = 'h-10 text-sm',
+}: {
+  options: { id: string; label: string; value: any }[];
+  current: any;
+  onSelect: (v: any) => void;
+  cols?: 2 | 3 | 4 | 5;
+  itemClass?: string;
+}) => {
+  const grid =
+    cols === 5 ? 'grid-cols-5' :
+    cols === 4 ? 'grid-cols-4' :
+    cols === 2 ? 'grid-cols-2' : 'grid-cols-3';
+
+  return (
+    <div className={`grid ${grid} gap-2 mt-2`}>
+      {options.map((o) => (
+        <Button
+          key={o.id}
+          type="button"
+          variant={Array.isArray(current) ? current.includes(o.value) ? 'default' : 'outline'
+                                            : current === o.value ? 'default' : 'outline'}
+          onClick={() => onSelect(o.value)}
+          className={itemClass}
+        >
+          {o.label}
+        </Button>
+      ))}
+    </div>
+  );
+};
+
+export const MentalForm = ({ subCategoryId, formData, onUpdate }: MentalFormProps) => {
+  const updateField = mergeUpdate(formData, onUpdate);
+
+  // ---------- REDUCIR ESTRÉS ----------
   if (subCategoryId === 'reducir_estres') {
     return (
       <>
         <div>
-          <Label>Título del objetivo</Label>
-          <Input
-            value={formData.title || ''}
-            onChange={(e) => updateField('title', e.target.value)}
-            placeholder="Ej: Reducir estrés diario"
-            className="mt-2"
-          />
-        </div>
-
-        <div>
           <Label>Nivel actual de estrés</Label>
-          <div className="grid grid-cols-3 gap-2 mt-2">
-            {[
+          <ButtonsGrid
+            options={[
               { id: 'bajo', label: 'Bajo', value: 'bajo' },
               { id: 'moderado', label: 'Moderado', value: 'moderado' },
-              { id: 'alto', label: 'Alto', value: 'alto' }
-            ].map((option) => (
-              <Button
-                key={option.id}
-                variant={formData.stressLevel === option.value ? 'default' : 'outline'}
-                onClick={() => updateField('stressLevel', option.value)}
-                className="h-10"
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
+              { id: 'alto', label: 'Alto', value: 'alto' },
+            ]}
+            current={formData.stressLevel}
+            onSelect={(v) => updateField('stressLevel', v)}
+          />
         </div>
 
         <div>
@@ -58,23 +89,17 @@ export const MentalForm = ({ subCategoryId, formData, onUpdate }: MentalFormProp
 
         <div>
           <Label>Técnicas preferidas</Label>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            {[
+          <ButtonsGrid
+            options={[
               { id: 'respiracion', label: 'Respiración', value: 'respiracion' },
               { id: 'pausas', label: 'Pausas activas', value: 'pausas' },
               { id: 'caminatas', label: 'Caminatas', value: 'caminatas' },
-              { id: 'meditacion', label: 'Meditación', value: 'meditacion' }
-            ].map((option) => (
-              <Button
-                key={option.id}
-                variant={formData.technique === option.value ? 'default' : 'outline'}
-                onClick={() => updateField('technique', option.value)}
-                className="h-10 text-sm"
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
+              { id: 'meditacion', label: 'Meditación', value: 'meditacion' },
+            ]}
+            current={formData.technique}
+            onSelect={(v) => updateField('technique', v)}
+            cols={2}
+          />
         </div>
 
         <div>
@@ -90,19 +115,10 @@ export const MentalForm = ({ subCategoryId, formData, onUpdate }: MentalFormProp
     );
   }
 
+  // ---------- DORMIR MEJOR ----------
   if (subCategoryId === 'dormir_mejor') {
     return (
       <>
-        <div>
-          <Label>Título del objetivo</Label>
-          <Input
-            value={formData.title || ''}
-            onChange={(e) => updateField('title', e.target.value)}
-            placeholder="Ej: Mejorar calidad del sueño"
-            className="mt-2"
-          />
-        </div>
-
         <div>
           <Label>Hora deseada de dormir</Label>
           <Input
@@ -125,170 +141,119 @@ export const MentalForm = ({ subCategoryId, formData, onUpdate }: MentalFormProp
 
         <div>
           <Label>Horas objetivo de sueño</Label>
-          <div className="grid grid-cols-4 gap-2 mt-2">
-            {[6, 7, 8, 9].map((hours) => (
-              <Button
-                key={hours}
-                variant={formData.sleepHours === hours ? 'default' : 'outline'}
-                onClick={() => updateField('sleepHours', hours)}
-                className="h-10"
-              >
-                {hours}h
-              </Button>
-            ))}
-          </div>
+          <ButtonsGrid
+            options={[6, 7, 8, 9].map((h) => ({
+              id: String(h),
+              label: `${h}h`,
+              value: h,
+            }))}
+            current={formData.sleepHours}
+            onSelect={(v) => updateField('sleepHours', v)}
+            cols={4}
+          />
         </div>
 
         <div>
           <Label>Problema principal</Label>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            {[
+          <ButtonsGrid
+            options={[
               { id: 'conciliar', label: 'Conciliar sueño', value: 'conciliar' },
               { id: 'despertar', label: 'Despertares', value: 'despertar' },
               { id: 'temprano', label: 'Despertar temprano', value: 'temprano' },
-              { id: 'calidad', label: 'Calidad', value: 'calidad' }
-            ].map((option) => (
-              <Button
-                key={option.id}
-                variant={formData.sleepProblem === option.value ? 'default' : 'outline'}
-                onClick={() => updateField('sleepProblem', option.value)}
-                className="h-10 text-xs"
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
+              { id: 'calidad', label: 'Calidad', value: 'calidad' },
+            ]}
+            current={formData.sleepProblem}
+            onSelect={(v) => updateField('sleepProblem', v)}
+            cols={2}
+            itemClass="h-10 text-xs"
+          />
         </div>
 
         <div>
           <Label>Duración ritual nocturno (minutos)</Label>
-          <div className="grid grid-cols-4 gap-2 mt-2">
-            {[10, 15, 20, 30].map((mins) => (
-              <Button
-                key={mins}
-                variant={formData.ritualDuration === mins ? 'default' : 'outline'}
-                onClick={() => updateField('ritualDuration', mins)}
-                className="h-10"
-              >
-                {mins}m
-              </Button>
-            ))}
-          </div>
+          <ButtonsGrid
+            options={[10, 15, 20, 30].map((m) => ({
+              id: String(m),
+              label: `${m}m`,
+              value: m,
+            }))}
+            current={formData.ritualDuration}
+            onSelect={(v) => updateField('ritualDuration', v)}
+            cols={4}
+          />
         </div>
 
         <div>
           <Label>¿Cafeína en la tarde?</Label>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            {[
+          <ButtonsGrid
+            options={[
               { id: 'si', label: 'Sí', value: true },
-              { id: 'no', label: 'No', value: false }
-            ].map((option) => (
-              <Button
-                key={option.id}
-                variant={formData.afternoonCaffeine === option.value ? 'default' : 'outline'}
-                onClick={() => updateField('afternoonCaffeine', option.value)}
-                className="h-10"
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
+              { id: 'no', label: 'No', value: false },
+            ]}
+            current={formData.afternoonCaffeine}
+            onSelect={(v) => updateField('afternoonCaffeine', v)}
+            cols={2}
+          />
         </div>
       </>
     );
   }
 
+  // ---------- MINDFULNESS / JOURNALING ----------
   if (subCategoryId === 'mindfulness') {
     return (
       <>
         <div>
-          <Label>Título del objetivo</Label>
-          <Input
-            value={formData.title || ''}
-            onChange={(e) => updateField('title', e.target.value)}
-            placeholder="Ej: Práctica diaria de mindfulness"
-            className="mt-2"
+          <Label>Práctica preferida</Label>
+          <ButtonsGrid
+            options={[
+              { id: 'meditacion', label: 'Meditación', value: 'meditacion' },
+              { id: 'respiracion', label: 'Respiración', value: 'respiracion' },
+              { id: 'diario', label: 'Diario/Journaling', value: 'diario' },
+              { id: 'gratitud', label: 'Gratitud', value: 'gratitud' },
+            ]}
+            current={formData.practice}
+            onSelect={(v) => updateField('practice', v)}
+            cols={2}
           />
         </div>
 
         <div>
-          <Label>Práctica preferida</Label>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            {[
-              { id: 'meditacion', label: 'Meditación', value: 'meditacion' },
-              { id: 'respiracion', label: 'Respiración', value: 'respiracion' },
-              { id: 'diario', label: 'Diario/Journaling', value: 'diario' },
-              { id: 'gratitud', label: 'Gratitud', value: 'gratitud' }
-            ].map((option) => (
-              <Button
-                key={option.id}
-                variant={formData.practice === option.value ? 'default' : 'outline'}
-                onClick={() => updateField('practice', option.value)}
-                className="h-10 text-sm"
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        <div>
           <Label>Frecuencia objetivo</Label>
-          <div className="grid grid-cols-3 gap-2 mt-2">
-            {[
+          <ButtonsGrid
+            options={[
               { id: 'diaria', label: 'Diaria', value: 7 },
               { id: '5x', label: '5x semana', value: 5 },
-              { id: '3x', label: '3x semana', value: 3 }
-            ].map((option) => (
-              <Button
-                key={option.id}
-                variant={formData.frequency === option.value ? 'default' : 'outline'}
-                onClick={() => updateField('frequency', option.value)}
-                className="h-10 text-sm"
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
+              { id: '3x', label: '3x semana', value: 3 },
+            ]}
+            current={formData.frequency}
+            onSelect={(v) => updateField('frequency', v)}
+          />
         </div>
 
         <div>
           <Label>Temas de enfoque</Label>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            {[
+          <ButtonsGrid
+            options={[
               { id: 'gratitud', label: 'Gratitud', value: 'gratitud' },
               { id: 'claridad', label: 'Claridad mental', value: 'claridad' },
-              { id: 'autodiálogo', label: 'Autodiálogo', value: 'autodiálogo' },
-              { id: 'emociones', label: 'Emociones', value: 'emociones' }
-            ].map((option) => (
-              <Button
-                key={option.id}
-                variant={formData.focusTopic === option.value ? 'default' : 'outline'}
-                onClick={() => updateField('focusTopic', option.value)}
-                className="h-10 text-xs"
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
+              { id: 'autodialogo', label: 'Autodiálogo', value: 'autodialogo' },
+              { id: 'emociones', label: 'Emociones', value: 'emociones' },
+            ]}
+            current={formData.focusTopic}
+            onSelect={(v) => updateField('focusTopic', v)}
+            cols={2}
+            itemClass="h-10 text-xs"
+          />
         </div>
       </>
     );
   }
 
+  // ---------- MENOS PANTALLA ----------
   if (subCategoryId === 'menos_pantalla') {
     return (
       <>
-        <div>
-          <Label>Título del objetivo</Label>
-          <Input
-            value={formData.title || ''}
-            onChange={(e) => updateField('title', e.target.value)}
-            placeholder="Ej: Reducir tiempo de pantalla"
-            className="mt-2"
-          />
-        </div>
-
         <div>
           <Label>Apps objetivo a reducir</Label>
           <Input
@@ -301,45 +266,37 @@ export const MentalForm = ({ subCategoryId, formData, onUpdate }: MentalFormProp
 
         <div>
           <Label>Límite diario (horas)</Label>
-          <div className="grid grid-cols-5 gap-2 mt-2">
-            {[0.5, 1, 1.5, 2, 3].map((hours) => (
-              <Button
-                key={hours}
-                variant={formData.dailyLimit === hours ? 'default' : 'outline'}
-                onClick={() => updateField('dailyLimit', hours)}
-                className="h-10 text-xs"
-              >
-                {hours}h
-              </Button>
-            ))}
-          </div>
+          <ButtonsGrid
+            options={[0.5, 1, 1.5, 2, 3].map((h) => ({
+              id: String(h),
+              label: `${h}h`,
+              value: h,
+            }))}
+            current={formData.dailyLimit}
+            onSelect={(v) => updateField('dailyLimit', v)}
+            cols={5}
+            itemClass="h-10 text-xs"
+          />
         </div>
 
         <div>
           <Label>Franjas de veto</Label>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            {[
+          <ButtonsGrid
+            options={[
               { id: 'manana', label: 'Primera hora', value: 'manana' },
               { id: 'comidas', label: 'Durante comidas', value: 'comidas' },
               { id: 'noche', label: '1h antes dormir', value: 'noche' },
-              { id: 'trabajo', label: 'En trabajo', value: 'trabajo' }
-            ].map((option) => (
-              <Button
-                key={option.id}
-                variant={formData.vetoSlots?.includes(option.value) ? 'default' : 'outline'}
-                onClick={() => {
-                  const current = formData.vetoSlots || [];
-                  const updated = current.includes(option.value)
-                    ? current.filter((s: string) => s !== option.value)
-                    : [...current, option.value];
-                  updateField('vetoSlots', updated);
-                }}
-                className="h-10 text-xs"
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
+              { id: 'trabajo', label: 'En trabajo', value: 'trabajo' },
+            ]}
+            current={formData.vetoSlots || []} // multi-select
+            onSelect={(v) => {
+              const current: string[] = formData.vetoSlots || [];
+              const updated = current.includes(v) ? current.filter((s) => s !== v) : [...current, v];
+              updateField('vetoSlots', updated);
+            }}
+            cols={2}
+            itemClass="h-10 text-xs"
+          />
         </div>
 
         <div>

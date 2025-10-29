@@ -232,3 +232,13 @@ export function getCategoryColor(categoryId: string): string {
   const category = getCategoryById(categoryId);
   return category?.color || 'primary';
 }
+
+export const getGoalName = (categoryId?: string, subCategoryId?: string) => {
+  if (!categoryId) return 'Objetivo';
+  const cat = getCategoryById(categoryId);
+  if (subCategoryId) {
+    const sub = getSubCategoryById(categoryId, subCategoryId);
+    return sub?.name ?? cat?.name ?? 'Objetivo';
+  }
+  return cat?.name ?? 'Objetivo';
+};

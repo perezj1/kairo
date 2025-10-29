@@ -3,19 +3,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useMemo } from "react";
 
-/** Subcategorías soportadas */
+/** Subcategorías soportadas (alineadas con CATEGORIES) */
 export type ReducirHabitosSubId =
   | "fumar"
   | "alcohol"
   | "azucar"
-  | "redes_sociales"
+  | "redes"
   | "otro_habito";
 
 interface ReducirHabitosFormProps {
   subCategoryId: ReducirHabitosSubId;
   formData: any;
   onUpdate: (data: any) => void;
-  /** Si el padre ya muestra minutos/dates, mantenlos en false para evitar duplicados */
+  /** Si el padre ya muestra minutos/fecha límite, pon en false para evitar duplicados */
   showMinutes?: boolean;
   showDeadline?: boolean;
 }
@@ -139,22 +139,10 @@ export const ReducirHabitosForm = ({
     </div>
   ) : null;
 
- 
-  
-
   /* ─────────────── FUMAR ─────────────── */
   if (subCategoryId === "fumar") {
     return (
       <>
-      <div>
-          <Label>Título del objetivo</Label>
-          <Input
-            value={formData.title || ''}
-            onChange={(e) => updateField('title', e.target.value)}
-            placeholder="Ej: Crear portafolio web"
-            className="mt-2"
-          />
-        </div>
         <div>
           <Label className="text-sm font-medium">Cigarrillos/día (actual)</Label>
           <Input
@@ -204,7 +192,6 @@ export const ReducirHabitosForm = ({
           />
         </div>
 
-        
         {DeadlinePicker}
         {MinutesPicker}
       </>
@@ -215,15 +202,6 @@ export const ReducirHabitosForm = ({
   if (subCategoryId === "alcohol") {
     return (
       <>
-      <div>
-          <Label>Título del objetivo</Label>
-          <Input
-            value={formData.title || ''}
-            onChange={(e) => updateField('title', e.target.value)}
-            placeholder="Ej: Crear portafolio web"
-            className="mt-2"
-          />
-        </div>
         <div>
           <Label className="text-sm font-medium">Copas/semana (actual)</Label>
           <Input
@@ -271,7 +249,6 @@ export const ReducirHabitosForm = ({
           </div>
         )}
 
-        
         {DeadlinePicker}
         {MinutesPicker}
       </>
@@ -282,15 +259,6 @@ export const ReducirHabitosForm = ({
   if (subCategoryId === "azucar") {
     return (
       <>
-      <div>
-                <Label>Título del objetivo</Label>
-                <Input
-                  value={formData.title || ''}
-                  onChange={(e) => updateField('title', e.target.value)}
-                  placeholder="Ej: Crear portafolio web"
-                  className="mt-2"
-                />
-              </div>
         <div>
           <Label className="text-sm font-medium">Foco principal</Label>
           <ButtonGroup
@@ -329,7 +297,6 @@ export const ReducirHabitosForm = ({
           />
         </div>
 
-        
         {DeadlinePicker}
         {MinutesPicker}
       </>
@@ -337,18 +304,9 @@ export const ReducirHabitosForm = ({
   }
 
   /* ─────────────── REDES SOCIALES ─────────────── */
-  if (subCategoryId === "redes_sociales") {
+  if (subCategoryId === "redes") {
     return (
       <>
-      <div>
-                <Label>Título del objetivo</Label>
-                <Input
-                  value={formData.title || ''}
-                  onChange={(e) => updateField('title', e.target.value)}
-                  placeholder="Ej: Crear portafolio web"
-                  className="mt-2"
-                />
-              </div>
         <div>
           <Label className="text-sm font-medium">Límite diario (min)</Label>
           <Input
@@ -371,7 +329,7 @@ export const ReducirHabitosForm = ({
           <ButtonGroup
             value={formData.blockWindow}
             options={[
-              { id: "mañana", label: "Mañana" },
+              { id: "manana", label: "Mañana" },
               { id: "tarde", label: "Tarde" },
               { id: "noche", label: "Noche" },
               { id: "ninguna", label: "Ninguna" },
@@ -380,7 +338,6 @@ export const ReducirHabitosForm = ({
           />
         </div>
 
-        
         {DeadlinePicker}
         {MinutesPicker}
       </>
@@ -391,20 +348,11 @@ export const ReducirHabitosForm = ({
   if (subCategoryId === "otro_habito") {
     return (
       <>
-      <div>
-                <Label>Título del objetivo</Label>
-                <Input
-                  value={formData.title || ''}
-                  onChange={(e) => updateField('title', e.target.value)}
-                  placeholder="Ej: Crear portafolio web"
-                  className="mt-2"
-                />
-              </div>
         <div>
           <Label className="text-sm font-medium">Hábito a reducir</Label>
           <Input
-            value={formData.title ?? ""}
-            onChange={(e) => updateField("title", e.target.value)}
+            value={formData.habitName ?? ""}
+            onChange={(e) => updateField("habitName", e.target.value)}
             placeholder="Ej: Snacks nocturnos"
             className="mt-2"
           />
@@ -437,7 +385,6 @@ export const ReducirHabitosForm = ({
           </div>
         </div>
 
-        
         {DeadlinePicker}
         {MinutesPicker}
       </>
