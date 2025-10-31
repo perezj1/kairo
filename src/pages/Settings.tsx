@@ -3,28 +3,20 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
-import { ArrowLeft, Bell, Clock, Globe } from 'lucide-react';
+import { CATEGORIES } from '@/lib/categories';
 import { toast } from 'sonner';
-
-interface Preferences {
-  notifications_enabled: boolean;
-  morning_hour: number;
-  noon_hour: number;
-  evening_hour: number;
-}
+import { ArrowLeft, Bell } from 'lucide-react';
+import BottomNav from '@/components/BottomNav';
+import { useI18n } from '@/contexts/I18nContext';
 
 const Settings = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [prefs, setPrefs] = useState<Preferences>({
-    notifications_enabled: true,
-    morning_hour: 9,
-    noon_hour: 13,
-    evening_hour: 20
-  });
+  const { t } = useI18n();
+  const [activeCategories, setActiveCategories] = useState<string[]>([]);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -33,44 +25,88 @@ const Settings = () => {
       navigate('/auth');
       return;
     }
-    loadPreferences();
-  }, [user]);
+    loadActiveCategories();
+  }, [user, navigate]);
 
-  const loadPreferences = async () => {
+  const loadActiveCategories = async () => {
     try {
-      const { data, error } = await supabase
-        .from('preferences')
-        .select('*')
+      const { data } = await supabase
+        .from('user_categories')
+        .select('category')
         .eq('user_id', user?.id)
-        .maybeSingle();
+        .eq('active', true);
 
-      if (error) throw error;
-      if (data) {
-        setPrefs(data);
+      setActiveCategories(data?.map(c => c.category) || []);
+
+      // Cargar preferencias de notificaciones
+      const { data: prefs } = await supabase
+        .from('preferences')
+        .select('notifications_enabled')
+        .eq('user_id', user?.id)
+        .single();
+
+      if (prefs) {
+        setNotificationsEnabled(prefs.notifications_enabled);
       }
     } catch (error) {
-      console.error('Error loading preferences:', error);
-      toast.error('Error al cargar preferencias');
+      console.error('Error loading categories:', error);
+      toast.error(t('error_loading_settings'));
     } finally {
       setLoading(false);
     }
   };
 
-  const savePreferences = async () => {
+  const toggleNotifications = async (enabled: boolean) => {
     setSaving(true);
     try {
       const { error } = await supabase
         .from('preferences')
-        .upsert({
-          user_id: user?.id,
-          ...prefs
-        });
+        .update({ notifications_enabled: enabled })
+        .eq('user_id', user?.id);
 
       if (error) throw error;
-      toast.success('Preferencias guardadas');
+
+      setNotificationsEnabled(enabled);
+      toast.success(enabled ? t('notifications_enabled') : t('notifications_disabled'));
     } catch (error) {
-      console.error('Error saving preferences:', error);
-      toast.error('Error al guardar');
+      console.error('Error updating notifications:', error);
+      toast.error(t('error_updating_settings'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleCategory = async (categoryId: string) => {
+    setSaving(true);
+    try {
+      const isActive = activeCategories.includes(categoryId);
+
+      if (isActive) {
+        // Desactivar
+        await supabase
+          .from('user_categories')
+          .update({ active: false })
+          .eq('user_id', user?.id)
+          .eq('category', categoryId);
+
+        setActiveCategories(prev => prev.filter(c => c !== categoryId));
+        toast.success('Categoría desactivada');
+      } else {
+        // Activar (upsert)
+        await supabase
+          .from('user_categories')
+          .upsert({
+            user_id: user?.id,
+            category: categoryId,
+            active: true
+          });
+
+        setActiveCategories(prev => [...prev, categoryId]);
+        toast.success('Categoría activada');
+      }
+    } catch (error) {
+      console.error('Error toggling category:', error);
+      toast.error('Error al actualizar categoría');
     } finally {
       setSaving(false);
     }
@@ -86,122 +122,93 @@ const Settings = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20">
-      {/* Header */}
-      <div className="bg-gradient-hero text-white p-6 rounded-b-3xl shadow-card">
-        <div className="flex items-center gap-3">
-          <Button 
-            variant="ghost" 
+      {/* Header - Duolingo Style */}
+      <div className="bg-gradient-hero text-white p-6 shadow-button">
+        <div className="max-w-2xl mx-auto flex items-center gap-4">
+          <Button
+            variant="ghost"
             size="icon"
+            className="text-white hover:bg-white/20 rounded-full"
             onClick={() => navigate('/home')}
-            className="text-white hover:bg-white/20"
           >
-            <ArrowLeft className="h-5 w-5" />
+            <ArrowLeft className="h-6 w-6" />
           </Button>
-          <div>
-            <h1 className="text-2xl font-bold">Configuración</h1>
-            <p className="text-white/90 text-sm">Personaliza tu experiencia</p>
-          </div>
+          <h1 className="text-3xl font-black">{t('settings')}</h1>
         </div>
       </div>
 
-      <div className="p-4 space-y-4">
-        {/* Notifications */}
-        <Card className="shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Bell className="h-5 w-5 text-primary" />
-              Notificaciones
+      <div className="p-6 max-w-2xl mx-auto space-y-6">
+        {/* Notificaciones - Duolingo Style */}
+        <Card className="shadow-hover border-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-3 text-2xl font-black">
+              <Bell className="h-6 w-6" />
+              {t('notifications')}
             </CardTitle>
+            <CardDescription className="text-base">
+              {t('notifications_desc')}
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between p-4 bg-muted/50 rounded-2xl">
               <div>
-                <Label className="text-sm font-medium">Recordatorios diarios</Label>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Te avisaremos de tus retos
+                <p className="font-bold text-lg">{t('daily_reminders')}</p>
+                <p className="text-sm text-muted-foreground">
+                  {t('daily_reminders_desc')}
                 </p>
               </div>
               <Switch
-                checked={prefs.notifications_enabled}
-                onCheckedChange={(checked) => 
-                  setPrefs({ ...prefs, notifications_enabled: checked })
-                }
+                checked={notificationsEnabled}
+                onCheckedChange={toggleNotifications}
+                disabled={saving}
+                className="scale-125"
               />
             </div>
           </CardContent>
         </Card>
 
-        {/* Notification Times */}
-        {prefs.notifications_enabled && (
-          <Card className="shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Clock className="h-5 w-5 text-primary" />
-                Horarios de recordatorio
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label className="text-sm font-medium">Mañana</Label>
-                <div className="grid grid-cols-4 gap-2 mt-2">
-                  {[7, 8, 9, 10].map((hour) => (
-                    <Button
-                      key={hour}
-                      variant={prefs.morning_hour === hour ? 'default' : 'outline'}
-                      onClick={() => setPrefs({ ...prefs, morning_hour: hour })}
-                      size="sm"
-                    >
-                      {hour}:00
-                    </Button>
-                  ))}
+        {/* Categorías activas - Duolingo Style */}
+        <Card className="shadow-hover border-2">
+          <CardHeader>
+            <CardTitle className="text-2xl font-black">{t('active_categories')}</CardTitle>
+            <CardDescription className="text-base">
+              {t('active_categories_desc')}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {CATEGORIES.map((category) => {
+              const isActive = activeCategories.includes(category.id);
+              return (
+                <div
+                  key={category.id}
+                  className="flex items-center justify-between p-5 border-2 rounded-2xl shadow-soft hover:shadow-button transition-all hover:scale-[1.02]"
+                  style={{
+                    borderColor: category.color,
+                    background: isActive ? `${category.color}15` : 'transparent'
+                  }}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="text-4xl">{category.icon}</div>
+                    <div>
+                      <h3 className="font-bold text-lg">{category.name}</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {category.description}
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={isActive}
+                    onCheckedChange={() => toggleCategory(category.id)}
+                    disabled={saving}
+                    className="scale-110"
+                  />
                 </div>
-              </div>
-
-              <div>
-                <Label className="text-sm font-medium">Mediodía</Label>
-                <div className="grid grid-cols-4 gap-2 mt-2">
-                  {[12, 13, 14, 15].map((hour) => (
-                    <Button
-                      key={hour}
-                      variant={prefs.noon_hour === hour ? 'default' : 'outline'}
-                      onClick={() => setPrefs({ ...prefs, noon_hour: hour })}
-                      size="sm"
-                    >
-                      {hour}:00
-                    </Button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <Label className="text-sm font-medium">Noche</Label>
-                <div className="grid grid-cols-4 gap-2 mt-2">
-                  {[19, 20, 21, 22].map((hour) => (
-                    <Button
-                      key={hour}
-                      variant={prefs.evening_hour === hour ? 'default' : 'outline'}
-                      onClick={() => setPrefs({ ...prefs, evening_hour: hour })}
-                      size="sm"
-                    >
-                      {hour}:00
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Save Button */}
-        <Button 
-          className="w-full" 
-          size="lg"
-          onClick={savePreferences}
-          disabled={saving}
-        >
-          {saving ? 'Guardando...' : 'Guardar cambios'}
-        </Button>
+              );
+            })}
+          </CardContent>
+        </Card>
       </div>
+      <BottomNav />
     </div>
   );
 };

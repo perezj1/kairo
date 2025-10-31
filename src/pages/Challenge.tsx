@@ -8,11 +8,16 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import confetti from 'canvas-confetti';
 import { ArrowLeft, Check, SkipForward } from 'lucide-react';
+import BottomNav from '@/components/BottomNav';
+import { useI18n } from '@/contexts/I18nContext';
+import { getTaskTranslation } from '@/lib/taskTranslations';
 
 const Challenge = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { locale } = useI18n();
   const [challenge, setChallenge] = useState<any>(null);
+  const [task, setTask] = useState<any>(null);
   const [goal, setGoal] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -39,6 +44,17 @@ const Challenge = () => {
         .eq('goal_id', goals.id)
         .eq('day', today)
         .single();
+
+      if (challenges) {
+        // Load task details
+        const { data: taskData } = await supabase
+          .from('tasks')
+          .select('*')
+          .eq('id', challenges.text)
+          .single();
+        
+        setTask(taskData);
+      }
 
       setChallenge(challenges);
     } catch (error) {
@@ -78,13 +94,17 @@ const Challenge = () => {
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div></div>;
-  if (!challenge) {
+  if (!challenge || !task) {
     navigate('/home');
     return null;
   }
 
+  const translation = getTaskTranslation(task.id, locale);
+  const displayTitle = translation?.title || task.title;
+  const displayDescription = translation?.description || task.description;
+
   return (
-    <div className="min-h-screen p-6">
+    <div className="min-h-screen p-6 pb-20">
       <Button variant="ghost" onClick={() => navigate('/home')} className="mb-6">
         <ArrowLeft className="h-4 w-4 mr-2" /> Volver
       </Button>
@@ -92,7 +112,7 @@ const Challenge = () => {
       <Card className="shadow-card">
         <CardContent className="p-8">
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold mb-3">Reto de hoy</h1>
+            <h1 className="text-3xl font-bold mb-3">{displayTitle}</h1>
             <div className="flex gap-2 justify-center">
               <Badge variant="secondary">{challenge.minutes} min</Badge>
               <Badge variant="outline">{challenge.kind}</Badge>
@@ -100,7 +120,7 @@ const Challenge = () => {
           </div>
 
           <div className="bg-gradient-hero/10 rounded-2xl p-8 mb-8">
-            <p className="text-xl text-center leading-relaxed">{challenge.text}</p>
+            <p className="text-xl text-center leading-relaxed">{displayDescription}</p>
           </div>
 
           <div className="space-y-3">
@@ -113,6 +133,7 @@ const Challenge = () => {
           </div>
         </CardContent>
       </Card>
+      <BottomNav />
     </div>
   );
 };

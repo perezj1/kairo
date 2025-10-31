@@ -1,298 +1,216 @@
-import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Flame, Heart, Trophy, LogOut, Settings, Target } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { LogOut, Settings, Target, ChevronLeft, ChevronRight, Globe, Flame, Trophy, Zap } from "lucide-react";
+import { getCategoryIcon, getCategoryColor, getCategoryById } from "@/lib/categories";
 import { toast } from "sonner";
-import GoalPillCard from "@/components/home/GoalPillCard";
-import DailyTaskItem from "@/components/home/DailyTaskItem";
-import { getCategoryIcon } from "@/lib/taskPlanner";
-import { ensureTodayTasksForGoal } from "@/lib/tasks";
+import BottomNav from "@/components/BottomNav";
+import { useI18n } from "@/contexts/I18nContext";
+import { shuffleTasks } from "@/lib/taskShuffler";
 
-interface Goal {
+interface Task {
   id: string;
-  title: string;
   category: string;
-  xp: number;
-  hearts: number;
-  streak: number;
-  level: number;
-  deadline_weeks: number | null;
-  active: boolean;
-  created_at?: string;
-  user_id?: string;
-  minutes?: number;
-  minutes_per_day?: number;
-  // form_data?: Record<string, any>; // <- si en el futuro quieres usarlo, expónlo también en lib/tasks
+  title: string;
+  description: string;
+  icon: string | null;
 }
-
-interface Challenge {
-  id: string;
-  goal_id: string;
-  day: string; // YYYY-MM-DD
-  text: string;
-  minutes: number;
-  kind: string; // accion | educacion | reflexion
-  status: string; // pending | done | skipped
-  created_at?: string;
-}
-
-type TodayStats = Record<string, { done: number; total: number }>;
 
 const Home = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const { t, cycle } = useI18n();
 
-  const [goals, setGoals] = useState<Goal[]>([]);
-  const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
-  const [todayTasks, setTodayTasks] = useState<Challenge[]>([]);
-  const [todayStats, setTodayStats] = useState<TodayStats>({});
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [stats, setStats] = useState({
+    totalXP: 0,
+    currentStreak: 0,
+    level: 1,
+    username: '',
+    avatarUrl: ''
+  });
 
-  // refs carrusel
-  const scrollerRef = useRef<HTMLDivElement | null>(null);
-  const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
-
-  const selectedGoal = useMemo(
-    () => goals.find((g) => g.id === selectedGoalId) || null,
-    [goals, selectedGoalId]
-  );
-
-  const todayISO = useMemo(() => new Date().toISOString().split("T")[0], []);
-  const rewardKey = useCallback(
-    (goalId: string) => `kairo.rewarded.${goalId}.${todayISO}`,
-    [todayISO]
-  );
-
-  // ---------- DATA LOADERS ----------
-  const fetchGoals = useCallback(async () => {
-    if (!user) return;
-    try {
-      setLoading(true);
-
-      const prevScrollLeft = scrollerRef.current?.scrollLeft ?? 0;
-
-      const { data: goalRows, error } = await supabase
-        .from("goals")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("active", true)
-        .order("created_at", { ascending: true });
-
-      if (error) throw error;
-
-      const list = (goalRows || []) as Goal[];
-      setGoals(list);
-
-      if (list.length > 0) {
-        const stillExists = list.some((g) => g.id === selectedGoalId);
-        setSelectedGoalId(stillExists ? selectedGoalId : list[0].id);
-      } else {
-        setSelectedGoalId(null);
-      }
-
-      if (list.length > 0) {
-        await fetchAllTodayStats(list.map((g) => g.id));
-      } else {
-        setTodayStats({});
-      }
-
-      requestAnimationFrame(() => {
-        if (scrollerRef.current) scrollerRef.current.scrollLeft = prevScrollLeft;
-      });
-    } catch (e) {
-      console.error(e);
-      toast.error("No se pudieron cargar tus objetivos");
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (!user) {
+      navigate("/auth");
+      return;
     }
-  }, [user, selectedGoalId]);
+    loadTasks();
+    loadUserStats();
+  }, [user, navigate]);
 
-  const fetchAllTodayStats = useCallback(
-    async (goalIds: string[]) => {
-      try {
-        const { data, error } = await supabase
-          .from("challenges")
-          .select("id, goal_id, status")
-          .in("goal_id", goalIds)
-          .eq("day", todayISO);
+  const loadUserStats = async () => {
+    try {
+      // Load profile info
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('username, avatar_url')
+        .eq('id', user?.id)
+        .single();
 
-        if (error) throw error;
+      // Load completed tasks for XP calculation
+      const { data: completedTasks } = await supabase
+        .from('completed_tasks')
+        .select('completed_at')
+        .eq('user_id', user?.id)
+        .eq('skipped', false);
 
-        const agg: TodayStats = {};
-        (data || []).forEach((row: { goal_id: string; status: string }) => {
-          if (!agg[row.goal_id]) agg[row.goal_id] = { done: 0, total: 0 };
-          agg[row.goal_id].total += 1;
-          if (row.status === "done") agg[row.goal_id].done += 1;
+      const totalXP = (completedTasks?.length || 0) * 10;
+      const level = Math.floor(totalXP / 100) + 1;
+
+      // Calculate current streak
+      let currentStreak = 0;
+      if (completedTasks && completedTasks.length > 0) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        const dates = completedTasks.map(t => {
+          const d = new Date(t.completed_at);
+          d.setHours(0, 0, 0, 0);
+          return d.getTime();
         });
-        goalIds.forEach((id) => {
-          if (!agg[id]) agg[id] = { done: 0, total: 0 };
-        });
-        setTodayStats(agg);
-      } catch (e) {
-        console.error(e);
-      }
-    },
-    [todayISO]
-  );
 
-  const fetchTodayTasks = useCallback(
-    async (goalId: string) => {
-      try {
-        const { data, error } = await supabase
-          .from("challenges")
-          .select("*")
-          .eq("goal_id", goalId)
-          .eq("day", todayISO)
-          .order("created_at", { ascending: true })
-          .limit(5);
-
-        if (error) throw error;
-
-        const list = (data || []) as Challenge[];
-
-        // Si no hay tareas, generamos y re-leemos
-        if (list.length === 0) {
-          const g = goals.find((x) => x.id === goalId);
-          if (g) {
-            try {
-              await ensureTodayTasksForGoal({
-                id: g.id,
-                category: g.category,
-                level: g.level ?? 1,
-                minutes_per_day: g.minutes_per_day ?? g.minutes ?? 10,
-              });
-            } catch (err: any) {
-              // ignora duplicados
-              const msg = String(err?.message || "");
-              const code = err?.code ?? err?.status;
-              const isDup =
-                code === 409 ||
-                code === "23505" ||
-                /duplicate key|unique constraint/i.test(msg);
-              if (!isDup) console.error("ensureTodayTasksForGoal error:", err);
-            }
-
-            const again = await supabase
-              .from("challenges")
-              .select("*")
-              .eq("goal_id", goalId)
-              .eq("day", todayISO)
-              .order("created_at", { ascending: true })
-              .limit(5);
-
-            if (!again.error) {
-              const reList = (again.data || []) as Challenge[];
-              setTodayTasks(reList);
-              const doneR = reList.filter((t) => t.status === "done").length;
-              const totalR = reList.length;
-              setTodayStats((prev) => ({ ...prev, [goalId]: { done: doneR, total: totalR } }));
-              return;
+        const uniqueDates = [...new Set(dates)].sort((a, b) => b - a);
+        
+        for (let i = 0; i < uniqueDates.length; i++) {
+          const daysDiff = Math.floor((today.getTime() - uniqueDates[i]) / (1000 * 60 * 60 * 24));
+          
+          if (i === 0 && daysDiff <= 1) {
+            currentStreak = 1;
+          } else if (i > 0) {
+            const prevDaysDiff = Math.floor((today.getTime() - uniqueDates[i-1]) / (1000 * 60 * 60 * 24));
+            if (daysDiff === prevDaysDiff + 1) {
+              currentStreak++;
+            } else {
+              break;
             }
           }
         }
-
-        // Normal path
-        setTodayTasks(list);
-        const done = list.filter((t) => t.status === "done").length;
-        const total = list.length;
-        setTodayStats((prev) => ({ ...prev, [goalId]: { done, total } }));
-      } catch (e: any) {
-        const msg = String(e?.message || "");
-        const code = e?.code ?? e?.status;
-        const isDup =
-          code === 409 ||
-          code === "23505" ||
-          /duplicate key|unique constraint/i.test(msg);
-
-        if (!isDup) {
-          console.error("fetchTodayTasks error:", e);
-          toast.error("No se pudieron cargar las tareas de hoy");
-        }
-
-        setTodayTasks([]);
-        setTodayStats((prev) => ({ ...prev, [goalId]: { done: 0, total: 0 } }));
       }
-    },
-    [todayISO, goals]
-  );
 
-  const reloadToday = useCallback(async () => {
-    if (selectedGoalId) await fetchTodayTasks(selectedGoalId);
-  }, [fetchTodayTasks, selectedGoalId]);
+      setStats({
+        totalXP,
+        currentStreak,
+        level,
+        username: profile?.username || user?.email?.split('@')[0] || 'Usuario',
+        avatarUrl: profile?.avatar_url || ''
+      });
+    } catch (error) {
+      console.error('Error loading stats:', error);
+    }
+  };
 
-  // Centrar la tarjeta seleccionada
-  const handleSelectGoal = useCallback((id: string) => {
-    setSelectedGoalId(id);
-    const el = itemRefs.current[id];
-    el?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
-  }, []);
-
-  // ---------- EFFECTS ----------
-  useEffect(() => {
-    if (user) fetchGoals();
-  }, [user, fetchGoals]);
-
-  useEffect(() => {
-    if (selectedGoalId) fetchTodayTasks(selectedGoalId);
-    else setTodayTasks([]);
-  }, [selectedGoalId, fetchTodayTasks]);
-
-  // ---------- DERIVED ----------
-  const selectedStats = todayStats[selectedGoalId ?? ""] || { done: 0, total: 0 };
-  const doneCount = selectedStats.done;
-  const totalCount = selectedStats.total;
-
-  const dayProgress = useMemo(() => {
-    if (totalCount === 0) return 0;
-    return Math.round((doneCount / totalCount) * 100);
-  }, [doneCount, totalCount]);
-
-  // ---------- REWARD WHEN ALL DONE ----------
-  const maybeAwardAndCelebrate = useCallback(async () => {
-    if (!selectedGoal || totalCount === 0) return;
-    const alreadyRewarded = localStorage.getItem(rewardKey(selectedGoal.id));
-    if (alreadyRewarded) return;
-
-    const allDone = doneCount === totalCount && totalCount > 0;
-    if (!allDone) return;
-
+  const loadTasks = async () => {
     try {
-      const newXp = (selectedGoal.xp || 0) + 10;
-      const newStreak = (selectedGoal.streak || 0) + 1;
+      const { data: userCategories } = await supabase
+        .from("user_categories")
+        .select("category")
+        .eq("user_id", user?.id)
+        .eq("active", true);
 
-      const { error } = await supabase
-        .from("goals")
-        .update({ xp: newXp, streak: newStreak })
-        .eq("id", selectedGoal.id);
+      if (!userCategories || userCategories.length === 0) {
+        setTasks([]);
+        setLoading(false);
+        return;
+      }
+
+      const activeCategories = userCategories.map((uc) => uc.category);
+      const { data: tasksData, error } = await supabase
+        .from("tasks")
+        .select("*")
+        .in("category", activeCategories);
 
       if (error) throw error;
+      
+      // Shuffle tasks to avoid consecutive tasks from same category
+      const shuffled = shuffleTasks(tasksData || []);
+      setTasks(shuffled);
+      setCurrentIndex(0);
+    } catch (error) {
+      console.error("Error loading tasks:", error);
+      toast.error("Error al cargar tus tareas");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      localStorage.setItem(rewardKey(selectedGoal.id), "1");
+  const current = tasks[currentIndex];
 
-      try {
-        const mod = await import("canvas-confetti");
-        const confetti = mod.default;
-        confetti({ particleCount: 160, spread: 75, origin: { y: 0.7 } });
-      } catch {}
-      toast.success("¡Todo hecho por hoy! +10 XP 🔥 +1 racha");
-
-      fetchGoals();
+  const handleComplete = useCallback(async () => {
+    if (!current) return;
+    try {
+      await supabase.from("completed_tasks").insert({
+        user_id: user?.id,
+        task_id: current.id,
+        completed_at: new Date().toISOString(),
+        skipped: false,
+      });
+      toast.success("¡Tarea completada! 🎉");
+      setCurrentIndex((i) => Math.min(i + 1, tasks.length - 1));
     } catch (e) {
       console.error(e);
-      toast.error("No se pudo aplicar la recompensa");
+      toast.error("Error al completar la tarea");
     }
-  }, [selectedGoal, doneCount, totalCount, rewardKey, fetchGoals]);
+  }, [current, tasks.length, user?.id]);
 
-  useEffect(() => {
-    maybeAwardAndCelebrate();
-  }, [doneCount, totalCount, selectedGoal?.id, maybeAwardAndCelebrate]);
+  const handleSkip = useCallback(async () => {
+    if (!current) return;
+    try {
+      await supabase.from("completed_tasks").insert({
+        user_id: user?.id,
+        task_id: current.id,
+        completed_at: new Date().toISOString(),
+        skipped: true,
+      });
+      toast.info("Tarea omitida");
+      setCurrentIndex((i) => Math.min(i + 1, tasks.length - 1));
+    } catch (e) {
+      console.error(e);
+      toast.error("Error al omitir la tarea");
+    }
+  }, [current, tasks.length, user?.id]);
 
-  // ---------- RENDER ----------
+  const prev = () => setCurrentIndex((i) => Math.max(i - 1, 0));
+  const next = () => setCurrentIndex((i) => Math.min(i + 1, tasks.length - 1));
+
+  // Touch handlers for swipe gestures
+  const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
+  const [touchEnd, setTouchEnd] = useState<{ x: number; y: number } | null>(null);
+
+  const minSwipeDistance = 50;
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart({
+      x: e.targetTouches[0].clientX,
+      y: e.targetTouches[0].clientY,
+    });
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd({
+      x: e.targetTouches[0].clientX,
+      y: e.targetTouches[0].clientY,
+    });
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+
+    const distanceX = touchStart.x - touchEnd.x;
+    const isLeftSwipe = distanceX > minSwipeDistance;
+    const isRightSwipe = distanceX < -minSwipeDistance;
+
+    if (isLeftSwipe) next();
+    if (isRightSwipe) prev();
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -301,146 +219,191 @@ const Home = () => {
     );
   }
 
-  return (
-    <div className="min-h-screen">
-      {/* HERO */}
-      <div
-        className="rounded-b-3xl p-4 pb-6 text-white"
-        style={{ background: "var(--gradient-hero)" }}
-      >
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">Hola 👋</h1>
-            <p className="text-white/90 text-sm">
-              {goals.length > 0 ? "Tus objetivos activos" : "Crea tu primer objetivo"}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-white hover:bg白/20 hover:bg-white/20"
-              onClick={() => navigate("/settings")}
-            >
+  if (!current) {
+    return (
+      <div className="min-h-screen bg-background p-6 flex flex-col">
+      {/* Header */}
+      <div className="bg-gradient-hero text-white p-6 shadow-button">
+        <div className="max-w-2xl mx-auto flex justify-between items-center">
+          <h1 className="text-3xl font-black">{t("app_name")}</h1>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="icon" className="text-white hover:bg-white/20 rounded-full" onClick={cycle}>
+              <Globe className="h-5 w-5" />
+            </Button>
+            <Button variant="ghost" size="icon" className="text-white hover:bg-white/20 rounded-full" onClick={() => navigate("/goals")}>
+              <Target className="h-5 w-5" />
+            </Button>
+            <Button variant="ghost" size="icon" className="text-white hover:bg-white/20 rounded-full" onClick={() => navigate("/settings")}>
               <Settings className="h-5 w-5" />
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-white hover:bg-white/20"
-              onClick={signOut}
-            >
+            <Button variant="ghost" size="icon" className="text-white hover:bg-white/20 rounded-full" onClick={signOut}>
               <LogOut className="h-5 w-5" />
             </Button>
           </div>
         </div>
-
-        {/* Carrusel */}
-        {goals.length > 0 ? (
-          <div
-            ref={scrollerRef}
-            className="mt-4 flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scroll-pl-4"
-          >
-            {goals.map((g) => {
-              const stats = todayStats[g.id] || { done: 0, total: 0 };
-              const prog = stats.total === 0 ? 0 : Math.round((stats.done / stats.total) * 100);
-              return (
-                <div
-                  key={g.id}
-                  ref={(el) => (itemRefs.current[g.id] = el)}
-                  className="snap-center shrink-0"
-                >
-                  <GoalPillCard
-                    goal={g}
-                    selected={selectedGoalId === g.id}
-                    onSelect={() => handleSelectGoal(g.id)}
-                    dayProgress={prog}
-                    todayCount={stats.total}
-                    doneCount={stats.done}
-                  />
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <Button
-            className="w-full mt-4 bg-white text-primary hover:bg-white/90"
-            onClick={() => navigate("/onboarding")}
-          >
-            <Target className="h-5 w-5 mr-2" />
-            Crear objetivo
-          </Button>
-        )}
-
-        {/* Stats rápidos */}
-        {selectedGoal && (
-          <div className="grid grid-cols-3 gap-3 mt-4">
-            <Card className="bg-white/10 border-white/20 backdrop-blur">
-              <CardContent className="p-4 text-center">
-                <Flame className="h-6 w-6 mx-auto mb-1 text-white" />
-                <div className="text-2xl font-bold text-white">{selectedGoal.streak}</div>
-                <div className="text-xs text-white/80">días</div>
-              </CardContent>
-            </Card>
-            <Card className="bg-white/10 border-white/20 backdrop-blur">
-              <CardContent className="p-4 text-center">
-                <Heart className="h-6 w-6 mx-auto mb-1 text-white" />
-                <div className="text-2xl font-bold text-white">{selectedGoal.hearts}</div>
-                <div className="text-xs text-white/80">vidas</div>
-              </CardContent>
-            </Card>
-            <Card className="bg-white/10 border-white/20 backdrop-blur">
-              <CardContent className="p-4 text-center">
-                <Trophy className="h-6 w-6 mx-auto mb-1 text-white" />
-                <div className="text-2xl font-bold text-white">{selectedGoal.xp}</div>
-                <div className="text-xs text-white/80">XP</div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
       </div>
 
-      {/* Tareas del objetivo seleccionado */}
-      <div className="p-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Tareas de hoy</h2>
-          {selectedGoal && (
-            <Badge className="rounded-full">
-              {getCategoryIcon(selectedGoal.category)} {selectedGoal.title}
-            </Badge>
-          )}
-        </div>
-
-        {/* Progreso */}
-        <div className="rounded-xl border border-border/60 p-3">
-          <div className="flex items-center justify-between text-sm mb-2">
-            <span>Progreso diario</span>
-            <span className="text-muted-foreground">{dayProgress}%</span>
-          </div>
-          <Progress value={dayProgress} className="h-2" />
-          <div className="mt-1 text-xs text-muted-foreground">
-            Hoy: {doneCount}/{totalCount} tareas
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="text-6xl mb-4">🎯</div>
+            <h2 className="text-2xl font-bold mb-2">{t("no_tasks_title")}</h2>
+            <p className="text-muted-foreground mb-6">{t("no_tasks_desc")}</p>
+            <Button onClick={() => navigate("/settings")}>{t("go_settings")}</Button>
           </div>
         </div>
+        <BottomNav />
+      </div>
+    );
+  }
 
-        {/* Lista de tareas */}
-        {todayTasks.length > 0 ? (
-          <div className="space-y-3">
-            {todayTasks.map((t) => (
-              <DailyTaskItem key={t.id} task={t} onStatusChange={() => reloadToday()} />
-            ))}
+  return (
+    <div className="min-h-screen bg-background flex flex-col pb-16">
+      {/* Header - Duolingo Style */}
+      <div className="bg-gradient-hero text-white p-6 shadow-button">
+        <div className="max-w-2xl mx-auto">
+          <div className="flex justify-between items-center mb-6">
+            <h1 className="text-3xl font-black">{t("app_name")}</h1>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="icon" className="text-white hover:bg-white/20 rounded-full" onClick={cycle}>
+                <Globe className="h-5 w-5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="text-white hover:bg-white/20 rounded-full" onClick={() => navigate("/goals")}>
+                <Target className="h-5 w-5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="text-white hover:bg-white/20 rounded-full" onClick={() => navigate("/settings")}>
+                <Settings className="h-5 w-5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="text-white hover:bg-white/20 rounded-full" onClick={signOut}>
+                <LogOut className="h-5 w-5" />
+              </Button>
+            </div>
           </div>
-        ) : (
-          <Card className="border-dashed">
-            <CardContent className="p-4 text-sm text-muted-foreground">
-              Aún no hay tareas generadas para hoy en este objetivo.
+
+          {/* User Stats - Duolingo Style */}
+          <div className="bg-white/10 backdrop-blur-sm rounded-3xl p-6 shadow-button border-2 border-white/20">
+            <div className="flex items-center gap-4 mb-5">
+              <Avatar 
+                className="h-20 w-20 border-4 border-white cursor-pointer hover:scale-105 transition-all shadow-lg"
+                onClick={() => navigate("/profile")}
+              >
+                <AvatarImage src={stats.avatarUrl} />
+                <AvatarFallback className="bg-white text-primary text-2xl font-black">
+                  {stats.username.charAt(0).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1">
+                <p className="font-black text-2xl drop-shadow-sm">{stats.username}</p>
+                <div className="flex items-center gap-2 text-sm mt-2">
+                  <Trophy className="h-5 w-5 text-yellow-300 drop-shadow-sm" />
+                  <span className="bg-white/30 px-3 py-1 rounded-full font-bold">{t("level")} {stats.level}</span>
+                </div>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-white/20 rounded-2xl p-4 flex items-center gap-3 hover:bg-white/25 transition-all">
+                <Zap className="h-8 w-8 text-yellow-300 drop-shadow-md" />
+                <div>
+                  <p className="text-xs opacity-90 uppercase tracking-wider font-bold">XP</p>
+                  <p className="font-black text-2xl drop-shadow-sm">{stats.totalXP}</p>
+                </div>
+              </div>
+              <div className="bg-white/20 rounded-2xl p-4 flex items-center gap-3 hover:bg-white/25 transition-all">
+                <Flame className="h-8 w-8 text-orange-300 drop-shadow-md" />
+                <div>
+                  <p className="text-xs opacity-90 uppercase tracking-wider font-bold">{t("streak")}</p>
+                  <p className="font-black text-2xl drop-shadow-sm">{stats.currentStreak}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Task Card - Duolingo Style */}
+      <div className="flex-1 p-6 flex items-center justify-center">
+        <div className="w-full max-w-md">
+          <Card 
+            className="w-full shadow-hover" 
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
+          >
+            <CardContent className="p-10 text-center relative">
+              {/* Category color indicator at top */}
+              <div 
+                className="absolute top-0 left-0 right-0 h-2 rounded-t-2xl"
+                style={{ backgroundColor: getCategoryColor(current.category) }}
+              />
+
+              <div className="mb-6 mt-2">
+                <div className="text-8xl mb-8 animate-scale-in">{current.icon || getCategoryIcon(current.category)}</div>
+                <div 
+                  className="inline-block px-5 py-2 rounded-full text-white text-sm font-black mb-6 uppercase tracking-wider shadow-button"
+                  style={{ backgroundColor: getCategoryColor(current.category) }}
+                >
+                  {getCategoryById(current.category)?.name || current.category.replace(/_/g, " ")}
+                </div>
+                <h2 className="text-3xl font-black mb-6 leading-tight text-foreground">{current.title}</h2>
+                <p className="text-muted-foreground text-lg leading-relaxed">{current.description}</p>
+              </div>
+
+              <div className="flex flex-col gap-4 mt-10">
+                <Button 
+                  className="w-full shadow-button hover:scale-[1.02] transition-transform" 
+                  size="lg" 
+                  onClick={handleComplete}
+                  variant="success"
+                >
+                  {t("complete")}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="w-full hover:scale-[1.02] transition-transform" 
+                  size="lg" 
+                  onClick={handleSkip}
+                >
+                  {t("skip")}
+                </Button>
+              </div>
+
+              <div className="mt-8 flex items-center justify-center gap-6 text-base text-muted-foreground">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={prev} 
+                  disabled={currentIndex === 0}
+                  className="hover:scale-110 transition-transform rounded-full"
+                >
+                  <ChevronLeft className="h-6 w-6" />
+                </Button>
+                <div className="flex items-center gap-2 font-bold">
+                  <span className="text-xl text-primary">{currentIndex + 1}</span>
+                  <span className="text-muted-foreground">/</span>
+                  <span className="text-lg">{tasks.length}</span>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={next} 
+                  disabled={currentIndex >= tasks.length - 1}
+                  className="hover:scale-110 transition-transform rounded-full"
+                >
+                  <ChevronRight className="h-6 w-6" />
+                </Button>
+              </div>
             </CardContent>
           </Card>
-        )}
+        </div>
       </div>
+
+      <div className="p-4 bg-gradient-to-r from-primary/5 via-accent/5 to-mint/5 text-center text-xs text-muted-foreground">
+        <p>{t("interact_hint")}</p>
+      </div>
+
+      <BottomNav />
     </div>
   );
 };
 
-export default Home;
+export default Home; 

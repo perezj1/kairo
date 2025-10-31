@@ -1,139 +1,108 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { useEffect, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
 import {
-  ArrowLeft,
-  Plus,
-  Flame,
-  Heart,
-  Trophy,
-  Calendar,
-  CheckCircle,
-  Trash2,
-} from 'lucide-react';
-import { getCategoryIcon, getCategoryColor } from '@/lib/categories';
-import { toast } from 'sonner';
-
-interface Goal {
-  id: string;
-  title: string;
-  category: string;
-  level: number;
-  xp: number;
-  streak: number;
-  hearts: number;
-  active: boolean;
-  target_weight: number | null;
-  deadline_weeks: number | null;
-  created_at: string;
-  status?: 'active' | 'paused' | 'completed' | 'archived';
-  completed_at?: string | null;
-}
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
+import { ArrowLeft } from "lucide-react";
+import { CATEGORIES } from "@/lib/categories";
+import { toast } from "sonner";
+import BottomNav from "@/components/BottomNav";
+import { useI18n } from "@/contexts/I18nContext";
 
 const Goals = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [goals, setGoals] = useState<Goal[]>([]);
+
+  // 🚫 Importante: todos los hooks ANTES de cualquier return condicional
+  const { t } = useI18n();
+
+  const [activeCategories, setActiveCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState<string | null>(null); // para deshabilitar botones por fila
+  const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (!user) {
-      navigate('/auth');
-      return;
-    }
-    loadGoals();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
-
-  const loadGoals = async () => {
+  const loadActiveCategories = useCallback(async () => {
+    if (!user?.id) return;
     try {
-      setLoading(true);
       const { data, error } = await supabase
-        .from('goals')
-        .select('*')
-        .eq('user_id', user?.id)
-        .order('created_at', { ascending: false });
+        .from("user_categories")
+        .select("category")
+        .eq("user_id", user.id)
+        .eq("active", true);
 
       if (error) throw error;
-      setGoals(data || []);
+      setActiveCategories((data ?? []).map((d) => d.category));
     } catch (error) {
-      console.error('Error loading goals:', error);
-      toast.error('Error al cargar objetivos');
+      console.error("Error loading categories:", error);
+      toast.error(t("error_loading_categories") || "Error al cargar objetivos");
     } finally {
       setLoading(false);
-      setBusyId(null);
     }
-  };
+  }, [user?.id, t]);
 
-  const toggleGoalActive = async (goalId: string, currentActive: boolean) => {
+  useEffect(() => {
+    // Redirige si no hay sesión
+    if (!user) {
+      navigate("/auth");
+      return;
+    }
+    // Carga datos cuando hay sesión
+    loadActiveCategories();
+  }, [user, navigate, loadActiveCategories]);
+
+  const toggleCategory = async (categoryId: string) => {
+    if (!user?.id) return;
+    setSaving(true);
     try {
-      setBusyId(goalId);
-      const payload: Partial<Goal> = {
-        active: !currentActive,
-        status: currentActive ? 'paused' : 'active',
-      };
-      const { error } = await supabase.from('goals').update(payload).eq('id', goalId);
-      if (error) throw error;
-      toast.success(currentActive ? 'Objetivo pausado' : 'Objetivo activado');
-      loadGoals();
+      const isActive = activeCategories.includes(categoryId);
+
+      if (isActive) {
+        // Desactivar
+        const { error } = await supabase
+          .from("user_categories")
+          .update({ active: false })
+          .eq("user_id", user.id)
+          .eq("category", categoryId);
+
+        if (error) throw error;
+
+        setActiveCategories((prev) => prev.filter((c) => c !== categoryId));
+        toast.success(t("goal_deactivated") || "Objetivo desactivado");
+      } else {
+        // Activar (insertar o actualizar)
+        const { error } = await supabase
+          .from("user_categories")
+          .upsert(
+            {
+              user_id: user.id,
+              category: categoryId,
+              active: true,
+            },
+            {
+              onConflict: "user_id,category",
+            }
+          );
+
+        if (error) throw error;
+
+        setActiveCategories((prev) =>
+          prev.includes(categoryId) ? prev : [...prev, categoryId]
+        );
+        toast.success(t("goal_activated") || "Objetivo activado");
+      }
     } catch (error) {
-      console.error('Error updating goal:', error);
-      toast.error('Error al actualizar objetivo');
-      setBusyId(null);
+      console.error("Error toggling category:", error);
+      toast.error(t("error_updating_goal") || "Error al actualizar el objetivo");
+    } finally {
+      setSaving(false);
     }
-  };
-
-  const completeGoal = async (goal: Goal) => {
-    try {
-      setBusyId(goal.id);
-      const { error } = await supabase
-        .from('goals')
-        .update({
-          active: false,
-          status: 'completed',
-          completed_at: new Date().toISOString(),
-        })
-        .eq('id', goal.id);
-
-      if (error) throw error;
-      toast.success('✅ Objetivo marcado como cumplido');
-      loadGoals();
-    } catch (error) {
-      console.error('Error completing goal:', error);
-      toast.error('Error al marcar como cumplido');
-      setBusyId(null);
-    }
-  };
-
-  const deleteGoal = async (goal: Goal) => {
-    const ok = confirm(`¿Eliminar "${goal.title}"? Esta acción no se puede deshacer.`);
-    if (!ok) return;
-
-    try {
-      setBusyId(goal.id);
-      const { error } = await supabase.from('goals').delete().eq('id', goal.id);
-      if (error) throw error;
-      toast.success('🗑️ Objetivo eliminado');
-      loadGoals();
-    } catch (error) {
-      console.error('Error deleting goal:', error);
-      toast.error('Error al eliminar objetivo');
-      setBusyId(null);
-    }
-  };
-
-  const getDeadlineText = (weeks: number | null) => {
-    if (!weeks) return null;
-    if (weeks === 1) return '1 semana';
-    if (weeks === 2) return '2 semanas';
-    if (weeks === 4) return '1 mes';
-    if (weeks === 12) return '3 meses';
-    return `${weeks} semanas`;
   };
 
   if (loading) {
@@ -144,204 +113,74 @@ const Goals = () => {
     );
   }
 
-  const activeGoals = goals.filter((g) => g.active);
-  const pausedGoals = goals.filter((g) => !g.active);
-
   return (
     <div className="min-h-screen bg-background pb-20">
-      {/* Header */}
-      <div className="bg-gradient-hero text-white p-6 rounded-b-3xl shadow-card">
-        <div className="flex items-center gap-3 mb-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => navigate('/home')}
-            className="text-white hover:bg-white/20"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold">Mis Objetivos</h1>
-            <p className="text-white/90 text-sm">Gestiona tus metas</p>
+      {/* Header - Duolingo Style */}
+      <div className="bg-gradient-hero text-white p-6 shadow-button">
+        <div className="max-w-2xl mx-auto">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-white hover:bg-white/20 rounded-full"
+              onClick={() => navigate("/home")}
+            >
+              <ArrowLeft className="h-6 w-6" />
+            </Button>
+            <h1 className="text-3xl font-black">{t("my_goals")}</h1>
           </div>
         </div>
-
-        <Button
-          className="w-full bg-white text-primary hover:bg-white/90"
-          onClick={() => navigate('/onboarding')}
-        >
-          <Plus className="h-5 w-5 mr-2" />
-          Nuevo objetivo
-        </Button>
       </div>
 
-      <div className="p-4 space-y-6">
-        {/* Active Goals */}
-        {activeGoals.length > 0 && (
-          <div className="space-y-3">
-            <h2 className="text-lg font-semibold px-1">Activos ({activeGoals.length})</h2>
-            {activeGoals.map((goal) => {
-              const categoryIcon = getCategoryIcon(goal.category);
-              const categoryColor = getCategoryColor(goal.category);
-              const deadlineText = getDeadlineText(goal.deadline_weeks);
-
+      <div className="max-w-2xl mx-auto p-6">
+        <Card className="shadow-hover">
+          <CardHeader>
+            <CardTitle className="text-3xl font-black">
+              {t("manage_goals")}
+            </CardTitle>
+            <CardDescription className="text-base">
+              {t("manage_goals_desc")}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {CATEGORIES.map((category) => {
+              const isActive = activeCategories.includes(category.id);
               return (
-                <Card key={goal.id} className="shadow-sm">
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-3 mb-3">
-                      <div
-                        className={`w-12 h-12 rounded-xl bg-${categoryColor}/10 flex items-center justify-center text-2xl flex-shrink-0`}
-                      >
-                        {categoryIcon}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold truncate">{goal.title}</h3>
-                        <p className="text-sm text-muted-foreground">Nivel {goal.level}</p>
-                      </div>
+                <div
+                  key={category.id}
+                  className="flex items-center justify-between p-5 rounded-2xl border-l-[6px] transition-all hover:shadow-button shadow-soft hover:scale-[1.02]"
+                  style={{
+                    borderLeftColor: category.color,
+                    background: `linear-gradient(135deg, ${category.color}15 0%, ${category.color}25 100%)`,
+                  }}
+                >
+                  <div className="flex items-center gap-4 flex-1">
+                    <span className="text-4xl drop-shadow-sm">
+                      {category.icon}
+                    </span>
+                    <div className="flex-1">
+                      <h3 className="font-bold text-lg text-foreground">
+                        {category.name}
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        {category.description}
+                      </p>
                     </div>
-
-                    {/* Stats */}
-                    <div className="grid grid-cols-3 gap-2 mb-3">
-                      <div className="flex items-center gap-1.5 text-sm">
-                        <Flame className="h-4 w-4 text-orange-500" />
-                        <span className="font-medium">{goal.streak}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-sm">
-                        <Heart className="h-4 w-4 text-red-500" />
-                        <span className="font-medium">{goal.hearts}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-sm">
-                        <Trophy className="h-4 w-4 text-yellow-500" />
-                        <span className="font-medium">{goal.xp}</span>
-                      </div>
-                    </div>
-
-                    {/* Badges */}
-                    <div className="flex flex-wrap gap-2 mb-3">
-                      {goal.target_weight && (
-                        <Badge variant="secondary" className="text-xs">
-                          Meta: {goal.target_weight}kg
-                        </Badge>
-                      )}
-                      {deadlineText && (
-                        <Badge variant="outline" className="text-xs">
-                          <Calendar className="h-3 w-3 mr-1" />
-                          {deadlineText}
-                        </Badge>
-                      )}
-                    </div>
-
-                    {/* Actions */}
-                    <div className="grid grid-cols-3 gap-2">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        className="rounded-xl"
-                        onClick={() => completeGoal(goal)}
-                        disabled={busyId === goal.id}
-                      >
-                        <CheckCircle className="h-4 w-4 mr-1" />
-                        Objetivo cumplido
-                      </Button>
-
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="rounded-xl"
-                        onClick={() => toggleGoalActive(goal.id, goal.active)}
-                        disabled={busyId === goal.id}
-                      >
-                        Pausar objetivo
-                      </Button>
-
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        className="rounded-xl"
-                        onClick={() => deleteGoal(goal)}
-                        disabled={busyId === goal.id}
-                      >
-                        <Trash2 className="h-4 w-4 mr-1" />
-                        Eliminar
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                  <Switch
+                    checked={isActive}
+                    onCheckedChange={() => toggleCategory(category.id)}
+                    disabled={saving}
+                    className="scale-110"
+                  />
+                </div>
               );
             })}
-          </div>
-        )}
-
-        {/* Paused Goals */}
-        {pausedGoals.length > 0 && (
-          <div className="space-y-3">
-            <h2 className="text-lg font-semibold px-1 text-muted-foreground">
-              Pausados ({pausedGoals.length})
-            </h2>
-            {pausedGoals.map((goal) => {
-              const categoryIcon = getCategoryIcon(goal.category);
-              const categoryColor = getCategoryColor(goal.category);
-
-              return (
-                <Card key={goal.id} className="shadow-sm opacity-60">
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-3 mb-3">
-                      <div
-                        className={`w-10 h-10 rounded-xl bg-${categoryColor}/10 flex items-center justify-center text-xl flex-shrink-0`}
-                      >
-                        {categoryIcon}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-sm truncate">{goal.title}</h3>
-                        <p className="text-xs text-muted-foreground">Nivel {goal.level}</p>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-2">
-                      <Button
-                        variant="default"
-                        size="sm"
-                        className="rounded-xl col-span-2"
-                        onClick={() => toggleGoalActive(goal.id, goal.active)}
-                        disabled={busyId === goal.id}
-                      >
-                        Reactivar
-                      </Button>
-
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        className="rounded-xl"
-                        onClick={() => deleteGoal(goal)}
-                        disabled={busyId === goal.id}
-                      >
-                        <Trash2 className="h-4 w-4 mr-1" />
-                        Eliminar
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        )}
-
-        {goals.length === 0 && (
-          <Card className="shadow-sm">
-            <CardContent className="p-8 text-center">
-              <div className="text-4xl mb-3">🎯</div>
-              <h3 className="font-semibold mb-2">No tienes objetivos aún</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                Crea tu primer objetivo y comienza tu viaje
-              </p>
-              <Button onClick={() => navigate('/onboarding')}>
-                <Plus className="h-4 w-4 mr-2" />
-                Crear objetivo
-              </Button>
-            </CardContent>
-          </Card>
-        )}
+          </CardContent>
+        </Card>
       </div>
+
+      <BottomNav />
     </div>
   );
 };
